@@ -1,12 +1,12 @@
 package com.ebis.nacionalidad.infrastructure.web;
 
-import com.ebis.nacionalidad.application.AuthenticationService;
 import com.ebis.nacionalidad.application.CaseAccessDeniedException;
 import com.ebis.nacionalidad.application.CaseNotFoundException;
 import com.ebis.nacionalidad.application.CaseQueryService;
-import com.ebis.nacionalidad.domain.model.ApplicationRole;
+import com.ebis.nacionalidad.domain.model.CaseEvent;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -33,10 +33,17 @@ public class CaseQueryController {
                     "Un ciudadano solo puede ver su propio expediente; extranjeria, policia y el "
                             + "emisor pueden ver cualquiera.")
     public CaseResponse getCase(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
-        ApplicationRole role =
-                ApplicationRole.valueOf(jwt.getClaimAsString(AuthenticationService.CLAIM_ROLE));
-        String evmAddress = jwt.getClaimAsString(AuthenticationService.CLAIM_EVM_ADDRESS);
-        return CaseResponse.from(caseQueryService.getCase(caseId, role, evmAddress));
+        AuthenticatedActor actor = AuthenticatedActor.from(jwt);
+        return CaseResponse.from(caseQueryService.getCase(caseId, actor.role(), actor.evmAddress()));
+    }
+
+    @GetMapping("/cases/{caseId}/timeline")
+    @Operation(
+            summary = "Historial de eventos del expediente",
+            description = "Reconstruido leyendo los eventos on-chain directamente (ver M6.5).")
+    public List<CaseEvent> getTimeline(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedActor actor = AuthenticatedActor.from(jwt);
+        return caseQueryService.getTimeline(caseId, actor.role(), actor.evmAddress());
     }
 
     @ExceptionHandler(CaseNotFoundException.class)

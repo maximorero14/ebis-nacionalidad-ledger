@@ -1,6 +1,7 @@
 package com.ebis.nacionalidad.infrastructure.web;
 
 import static org.hamcrest.Matchers.is;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,8 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ebis.nacionalidad.domain.model.ApplicationRole;
-import java.sql.Timestamp;
-import java.time.Instant;
+import com.ebis.nacionalidad.domain.model.CaseStatus;
+import com.ebis.nacionalidad.domain.model.OnChainCase;
+import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
+import java.math.BigInteger;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +21,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -27,7 +31,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Exercises the actual HTTP + Spring Security stack (not the services directly) for the
  * three M6.2 acceptance scenarios: no token, a token whose role/ownership doesn't
- * authorize the request, and access to someone else's case.
+ * authorize the request, and access to someone else's case. The ledger port is mocked —
+ * this is an authorization test, not a blockchain integration test (that's M5.2/future
+ * M6 backend-integration evidence).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -40,27 +46,24 @@ class SecurityIntegrationTest {
 
     private static final String CITIZEN_ADDRESS = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc";
     private static final String OTHER_OWNER_ADDRESS = "0x000000000000000000000000000000000000aa";
-
-    @Autowired private MockMvc mockMvc;
-    @Autowired private JdbcTemplate jdbcTemplate;
-
     private static final long OWN_CASE_ID = 1L;
     private static final long OTHERS_CASE_ID = 2L;
 
+    @Autowired private MockMvc mockMvc;
+    @MockitoBean private NationalityLedgerClient nationalityLedgerClient;
+
     @BeforeEach
     void seedCases() {
-        jdbcTemplate.update("DELETE FROM case_projection");
-        insertCase(OWN_CASE_ID, CITIZEN_ADDRESS);
-        insertCase(OTHERS_CASE_ID, OTHER_OWNER_ADDRESS);
+        when(nationalityLedgerClient.readCase(OWN_CASE_ID))
+                .thenReturn(Optional.of(onChainCase(OWN_CASE_ID, CITIZEN_ADDRESS)));
+        when(nationalityLedgerClient.readCase(OTHERS_CASE_ID))
+                .thenReturn(Optional.of(onChainCase(OTHERS_CASE_ID, OTHER_OWNER_ADDRESS)));
+        when(nationalityLedgerClient.readCase(999_999L)).thenReturn(Optional.empty());
     }
 
-    private void insertCase(long caseId, String owner) {
-        jdbcTemplate.update(
-                "INSERT INTO case_projection (case_id, owner_address, status, review_round, updated_at) "
-                        + "VALUES (?, ?, 'IN_REVIEW', 0, ?)",
-                caseId,
-                owner,
-                Timestamp.from(Instant.now()));
+    private OnChainCase onChainCase(long caseId, String owner) {
+        return new OnChainCase(
+                caseId, owner, CaseStatus.IN_REVIEW, 0, "0x00", false, false, false, BigInteger.ZERO);
     }
 
     @Test

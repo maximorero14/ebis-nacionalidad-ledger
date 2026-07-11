@@ -69,6 +69,8 @@ public class SecurityConfig {
                                 authorize
                                         .requestMatchers(HttpMethod.POST, "/auth/login")
                                         .permitAll()
+                                        .requestMatchers(HttpMethod.GET, "/credentials/*", "/credentials/*/validity")
+                                        .permitAll()
                                         .requestMatchers(
                                                 "/network/status",
                                                 "/actuator/**",

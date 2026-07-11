@@ -5,17 +5,16 @@ import com.ebis.nacionalidad.domain.port.BesuBlockchainClient;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.Web3jService;
 import org.web3j.protocol.core.Request;
 import org.web3j.protocol.core.Response;
-import org.web3j.protocol.http.HttpService;
 
 /**
- * Only class in the application allowed to import web3j types (domain.port.BesuBlockchainClient
- * is the seam every other layer depends on instead).
+ * One of two classes in the application allowed to import web3j types (the other is
+ * Web3jNationalityLedgerClient); domain.port.BesuBlockchainClient is the seam every other
+ * layer depends on instead. Shares the Web3j/Web3jService beans from Web3jConfig.
  */
 @Component
 public class Web3jBesuBlockchainClient implements BesuBlockchainClient {
@@ -23,9 +22,9 @@ public class Web3jBesuBlockchainClient implements BesuBlockchainClient {
     private final Web3j web3j;
     private final Web3jService web3jService;
 
-    public Web3jBesuBlockchainClient(@Value("${besu.rpc-url}") String rpcUrl) {
-        this.web3jService = new HttpService(rpcUrl);
-        this.web3j = Web3j.build(web3jService);
+    public Web3jBesuBlockchainClient(Web3j web3j, Web3jService web3jService) {
+        this.web3j = web3j;
+        this.web3jService = web3jService;
     }
 
     @Override

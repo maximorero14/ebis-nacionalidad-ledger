@@ -1,9 +1,11 @@
 package com.ebis.nacionalidad;
 
+import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -15,6 +17,11 @@ class BackendApplicationTests {
 
     @Container @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17.10-alpine");
+
+    // No real deployment manifest/Besu network exists in this test's sandbox; every
+    // controller that needs the ledger port gets a mock instead (see SecurityIntegrationTest
+    // for one that actually stubs behaviour).
+    @MockitoBean private NationalityLedgerClient nationalityLedgerClient;
 
     @Test
     void contextLoadsAndFlywayMigrationsApply() {
