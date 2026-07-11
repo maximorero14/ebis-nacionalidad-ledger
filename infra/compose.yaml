@@ -1,0 +1,84 @@
+name: ebis-nacionalidad-ledger
+
+x-besu-image: &besu-image hyperledger/besu:26.6.1
+
+x-besu-common: &besu-common
+  image: *besu-image
+  restart: unless-stopped
+  networks:
+    - besu
+  volumes:
+    - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+  healthcheck:
+    test: ["CMD-SHELL", "besu --version >/dev/null 2>&1"]
+    interval: 30s
+    timeout: 10s
+    retries: 5
+    start_period: 20s
+  deploy:
+    resources:
+      limits:
+        memory: 1024M
+
+services:
+  validator1:
+    <<: *besu-common
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ../blockchain/besu/generated/validator1:/node:ro
+      - ../blockchain/besu/generated/validator1/data:/data
+
+  validator2:
+    <<: *besu-common
+    depends_on:
+      - validator1
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ../blockchain/besu/generated/validator2:/node:ro
+      - ../blockchain/besu/generated/validator2/data:/data
+
+  validator3:
+    <<: *besu-common
+    depends_on:
+      - validator1
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ../blockchain/besu/generated/validator3:/node:ro
+      - ../blockchain/besu/generated/validator3/data:/data
+
+  validator4:
+    <<: *besu-common
+    depends_on:
+      - validator1
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ../blockchain/besu/generated/validator4:/node:ro
+      - ../blockchain/besu/generated/validator4/data:/data
+
+  rpcnode:
+    <<: *besu-common
+    depends_on:
+      - validator1
+      - validator2
+      - validator3
+      - validator4
+    command:
+      - --config-file=/node/config.toml
+    ports:
+      - "127.0.0.1:8545:8545"
+    volumes:
+      - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ../blockchain/besu/generated/rpcnode:/node:ro
+      - ../blockchain/besu/generated/rpcnode/data:/data
+
+networks:
+  besu:
+    driver: bridge

@@ -1,0 +1,32 @@
+{
+  "name": "ebis-nacionalidad-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:coverage": "hardhat test --coverage",
+    "test:gas": "hardhat test --gas-stats",
+    "lint": "solhint 'contracts/**/*.sol'",
+    "format": "prettier --write --no-error-on-unmatched-pattern hardhat.config.ts package.json '.solhint.json' 'contracts/**/*.sol' 'test/**/*.ts' 'scripts/**/*.js'",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern hardhat.config.ts package.json '.solhint.json' 'contracts/**/*.sol' 'test/**/*.ts' 'scripts/**/*.js'",
+    "abis": "node scripts/export-abis.js",
+    "build": "npm run compile && npm run abis"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.6.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "5.0.7",
+    "hardhat": "3.9.1",
+    "prettier": "3.9.5",
+    "prettier-plugin-solidity": "2.3.1",
+    "solhint": "6.2.3",
+    "typescript": "7.0.2",
+    "viem": "2.55.0"
+  }
+}

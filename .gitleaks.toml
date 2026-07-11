@@ -1,0 +1,16 @@
+title = "ebis-nacionalidad-ledger gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Demo placeholders allowed in templates only"
+paths = [
+  '''infra/env\.example''',
+  '''docs/VERSIONES\.md''',
+]
+regexes = [
+  '''change-me-demo-only''',
+  '''replace-with-local-random-demo-secret''',
+]
+

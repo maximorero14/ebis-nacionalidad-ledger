@@ -1,0 +1,8 @@
+node_modules/
+artifacts/
+cache/
+coverage/
+dist/
+generated/
+blockchain/besu/generated/
+docs/evidencias/generated/

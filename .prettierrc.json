@@ -1,0 +1,15 @@
+{
+  "printWidth": 100,
+  "singleQuote": false,
+  "trailingComma": "none",
+  "plugins": ["prettier-plugin-solidity"],
+  "overrides": [
+    {
+      "files": "*.sol",
+      "options": {
+        "compiler": "0.8.31",
+        "tabWidth": 4
+      }
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!infra/env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+**/keystore/
+**/keys/
+**/secrets/
+wallets/
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+.vite/
+artifacts/
+cache/
+generated/
+frontend/.env.local
+blockchain/contracts/artifacts/
+blockchain/contracts/cache/
+blockchain/contracts/typechain-types/
+
+# Java
+target/
+.gradle/
+out/
+
+# Docker/runtime data
+data/
+volumes/
+postgres-data/
+besu-data/
+blockchain/besu/generated/
+*.log
+logs/
+
+# Evidence generated locally
+docs/evidencias/generated/
