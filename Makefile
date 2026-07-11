@@ -2,7 +2,7 @@ GITLEAKS_VERSION := v8.30.1
 BESU_VERSION := 26.6.1
 COMPOSE_FILE := infra/compose.yaml
 
-.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate up down logs network-status reset-demo deploy verify-deployment test-integration
+.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate up down logs network-status reset-demo deploy verify-deployment test-integration seed seed-verify
 
 security: secret-scan
 
@@ -40,6 +40,18 @@ network-status:
 	./scripts/besu-network-status.sh
 
 reset-demo:
+	@if [ "$$CONFIRM" != "RESET" ]; then \
+		echo "=================================================================="; \
+		echo " reset-demo WIPES ALL local Besu chain data and regenerates the"; \
+		echo " network from scratch (new genesis, new validator keys, new"; \
+		echo " contract addresses). This is the LOCAL DEVELOPMENT network only"; \
+		echo " ($(COMPOSE_FILE), 127.0.0.1) — no production environment exists"; \
+		echo " and this command cannot reach one."; \
+		echo ""; \
+		echo " Re-run explicitly to confirm: make reset-demo CONFIRM=RESET"; \
+		echo "=================================================================="; \
+		exit 1; \
+	fi
 	docker compose -f $(COMPOSE_FILE) down -v
 	rm -rf blockchain/besu/generated
 	BESU_VERSION=$(BESU_VERSION) ./scripts/besu-generate-network.sh
@@ -57,3 +69,11 @@ verify-deployment:
 test-integration:
 	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
 		npm run test:integration
+
+seed:
+	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
+		npm run seed
+
+seed-verify:
+	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
+		npm run seed:verify
