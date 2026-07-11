@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:${POSTGRES_HOST_PORT:5434}/${POSTGRES_DB:ebis_demo}
+    username: ${POSTGRES_USER:ebis_demo}
+    password: ${POSTGRES_PASSWORD}
+
+logging:
+  level:
+    com.ebis.nacionalidad: DEBUG

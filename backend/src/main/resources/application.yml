@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: ebis-nacionalidad-ledger-backend
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+besu:
+  rpc-url: ${BESU_LOCAL_RPC_URL:http://127.0.0.1:8545}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Project-local Maven settings. This repo is not related to any corporate CodeArtifact
+  repository — it intentionally does NOT inherit the machine's global ~/.m2/settings.xml
+  profiles (e.g. a private registry), so builds only ever resolve from Maven Central.
+  Applied automatically via .mvn/maven.config (`-s .mvn/settings.xml`).
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+</settings>
