@@ -41,4 +41,6 @@ network-status:
 
 reset-demo:
 	docker compose -f $(COMPOSE_FILE) down -v
+	rm -rf blockchain/besu/generated
 	BESU_VERSION=$(BESU_VERSION) ./scripts/besu-generate-network.sh
+	docker compose -f $(COMPOSE_FILE) up -d
