@@ -12,10 +12,12 @@
     "test:coverage": "hardhat test --coverage",
     "test:gas": "hardhat test --gas-stats",
     "lint": "solhint 'contracts/**/*.sol'",
-    "format": "prettier --write --no-error-on-unmatched-pattern hardhat.config.ts package.json '.solhint.json' 'contracts/**/*.sol' 'test/**/*.ts' 'scripts/**/*.js'",
-    "format:check": "prettier --check --no-error-on-unmatched-pattern hardhat.config.ts package.json '.solhint.json' 'contracts/**/*.sol' 'test/**/*.ts' 'scripts/**/*.js'",
+    "format": "prettier --write --no-error-on-unmatched-pattern hardhat.config.ts package.json '.solhint.json' 'contracts/**/*.sol' 'test/**/*.ts' 'scripts/**/*.js' 'scripts/**/*.ts'",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern hardhat.config.ts package.json '.solhint.json' 'contracts/**/*.sol' 'test/**/*.ts' 'scripts/**/*.js' 'scripts/**/*.ts'",
     "abis": "node scripts/export-abis.js",
-    "build": "npm run compile && npm run abis"
+    "build": "npm run compile && npm run abis",
+    "deploy": "hardhat run scripts/deploy-contracts.ts",
+    "verify-deployment": "hardhat run scripts/verify-deployment.ts"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.6.1"

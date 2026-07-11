@@ -45,13 +45,25 @@ Revisit this pin whenever `BESU_VERSION` is upgraded, since a future Besu releas
 the layered-pool issue.
 
 `blockchain/besu/qbftConfigFile.json` additionally pre-funds the well-known Hardhat/Anvil
-local test account #0 (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`, from the public devnet
-mnemonic `test test test test test test test test test test test junk`) with a nominal
-demo balance. This is a universally public, zero-value devnet key — never use it outside
-local development, and never fund it on a real network. It is kept as a realistic stand-in
-for the backend-controlled functional accounts (deployer, treasury, per-actor keystores)
-that M5/M6 will create, since those will also hold a small balance rather than relying only
-on `min-gas-price=0`.
+local test accounts (from the public devnet mnemonic `test test test test test test test
+test test test test junk`, addresses 0-5) with a nominal demo balance. These are
+universally public, zero-value devnet keys — never use them outside local development, and
+never fund them on a real network. They stand in for the backend-controlled functional
+accounts (deployer, treasury, per-actor keystores) that M5/M6 use, since those hold a small
+balance rather than relying only on `min-gas-price=0`.
+
+| Index | Address | Demo role (M5/M6) |
+|---|---|---|
+| 0 | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` | Deployer / `DEFAULT_ADMIN_ROLE` |
+| 1 | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` | Treasury |
+| 2 | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` | Extranjeria (`FOREIGN_AFFAIRS_ROLE`) |
+| 3 | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` | Policia (`POLICE_ROLE`) |
+| 4 | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` | Emisor/administrador (`CREDENTIAL_ISSUER_ROLE`, `REVOKER_ROLE`, `MINTER_ROLE`, `FAUCET_ROLE`, `FEE_COLLECTOR_ROLE`) |
+| 5 | `0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc` | Ciudadano demo 1 |
+
+Private keys are never committed. Any developer can derive them locally from the same
+public mnemonic (e.g. with `viem/accounts`' `mnemonicToAccount(mnemonic, { addressIndex })`)
+when a local `.env` needs `BESU_DEPLOYER_PRIVATE_KEY` or an actor's key for manual testing.
 
 ## Commands
 

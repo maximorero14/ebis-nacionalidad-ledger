@@ -2,7 +2,7 @@ GITLEAKS_VERSION := v8.30.1
 BESU_VERSION := 26.6.1
 COMPOSE_FILE := infra/compose.yaml
 
-.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate up down logs network-status reset-demo
+.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate up down logs network-status reset-demo deploy verify-deployment
 
 security: secret-scan
 
@@ -44,3 +44,12 @@ reset-demo:
 	rm -rf blockchain/besu/generated
 	BESU_VERSION=$(BESU_VERSION) ./scripts/besu-generate-network.sh
 	docker compose -f $(COMPOSE_FILE) up -d
+
+deploy:
+	BESU_DEPLOYER_PRIVATE_KEY=$${BESU_DEPLOYER_PRIVATE_KEY:-$$(node scripts/print-dev-private-key.js 0)} \
+		BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
+		npm run deploy
+
+verify-deployment:
+	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
+		npm run verify-deployment
