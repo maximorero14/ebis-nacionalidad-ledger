@@ -8,9 +8,11 @@ description = "Demo placeholders allowed in templates only"
 paths = [
   '''infra/env\.example''',
   '''docs/VERSIONES\.md''',
+  '''backend/src/main/resources/application-test\.yml''',
 ]
 regexes = [
   '''change-me-demo-only''',
   '''replace-with-local-random-demo-secret''',
+  '''test-only-jwt-signing-secret-not-for-any-real-use-0123456789''',
 ]
 

@@ -1,6 +1,12 @@
 besu:
   rpc-url: http://127.0.0.1:8545
 
+app:
+  security:
+    jwt:
+      # Test-only signing key, never used outside the test profile.
+      secret: test-only-jwt-signing-secret-not-for-any-real-use-0123456789
+
 logging:
   level:
     com.ebis.nacionalidad: DEBUG

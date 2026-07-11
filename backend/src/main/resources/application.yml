@@ -11,6 +11,12 @@ spring:
 besu:
   rpc-url: ${BESU_LOCAL_RPC_URL:http://127.0.0.1:8545}
 
+app:
+  security:
+    jwt:
+      secret: ${API_JWT_SECRET}
+      ttl-minutes: 15
+
 management:
   endpoints:
     web:
