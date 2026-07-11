@@ -18,7 +18,11 @@
     "difficulty": "0x1",
     "mixHash": "0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365",
     "coinbase": "0x0000000000000000000000000000000000000000",
-    "alloc": {}
+    "alloc": {
+      "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266": {
+        "balance": "0x3635C9ADC5DEA00000"
+      }
+    }
   },
   "blockchain": {
     "nodes": {

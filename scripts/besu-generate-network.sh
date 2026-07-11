@@ -7,6 +7,19 @@ BESU_DIR="${ROOT_DIR}/blockchain/besu"
 GENERATED_DIR="${BESU_DIR}/generated"
 NETWORK_FILES_DIR="${GENERATED_DIR}/networkFiles"
 
+# Besu validates bootnode enode URLs as literal IPs (Docker Compose service
+# hostnames are not resolved), so nodes get the static IPs pinned in
+# infra/compose.yaml's `besu` network (172.24.0.0/24).
+RPC_IP="172.24.0.15"
+validator_ip() {
+  echo "172.24.0.1$1"
+}
+
+if [ -f "${GENERATED_DIR}/genesis.json" ]; then
+  echo "Genesis already generated in ${GENERATED_DIR}; skipping (use 'make reset-demo' to regenerate)."
+  exit 0
+fi
+
 mkdir -p "${GENERATED_DIR}"
 
 docker run --rm \
@@ -20,7 +33,10 @@ docker run --rm \
 
 cp "${NETWORK_FILES_DIR}/genesis.json" "${GENERATED_DIR}/genesis.json"
 
-mapfile -t validator_dirs < <(find "${NETWORK_FILES_DIR}/keys" -mindepth 1 -maxdepth 1 -type d | sort)
+validator_dirs=()
+while IFS= read -r dir; do
+  validator_dirs+=("${dir}")
+done < <(find "${NETWORK_FILES_DIR}/keys" -mindepth 1 -maxdepth 1 -type d | sort)
 
 if [ "${#validator_dirs[@]}" -ne 4 ]; then
   echo "Expected 4 validator key directories, found ${#validator_dirs[@]}" >&2
@@ -38,7 +54,8 @@ for idx in 1 2 3 4; do
   cp "${src}/key" "${dest}/data/key"
   cp "${src}/key.pub" "${dest}/data/key.pub"
   pubkey="$(tr -d '\n' < "${dest}/data/key.pub")"
-  enode="enode://${pubkey}@validator${idx}:30303"
+  pubkey="${pubkey#0x}"
+  enode="enode://${pubkey}@$(validator_ip "${idx}"):30303"
   bootnodes+=("${enode}")
   printf '%s\n' "${enode}" > "${dest}/enode"
 done
@@ -51,7 +68,8 @@ docker run --rm \
   "hyperledger/besu:${BESU_VERSION}" \
   public-key export --to=/data/key.pub --node-private-key-file=/data/key
 rpc_pubkey="$(tr -d '\n' < "${GENERATED_DIR}/rpcnode/data/key.pub")"
-rpc_enode="enode://${rpc_pubkey}@rpcnode:30303"
+rpc_pubkey="${rpc_pubkey#0x}"
+rpc_enode="enode://${rpc_pubkey}@${RPC_IP}:30303"
 printf '%s\n' "${rpc_enode}" > "${GENERATED_DIR}/rpcnode/enode"
 
 all_nodes=("${bootnodes[@]}" "${rpc_enode}")
@@ -89,6 +107,7 @@ bootnodes_toml="$(write_bootnodes_toml_array)"
 for node in validator1 validator2 validator3 validator4; do
   cat > "${GENERATED_DIR}/${node}/config.toml" <<EOF
 genesis-file="/config/genesis.json"
+tx-pool="legacy"
 data-path="/data"
 profile="ENTERPRISE"
 
@@ -117,6 +136,7 @@ done
 
 cat > "${GENERATED_DIR}/rpcnode/config.toml" <<EOF
 genesis-file="/config/genesis.json"
+tx-pool="legacy"
 data-path="/data"
 profile="ENTERPRISE"
 

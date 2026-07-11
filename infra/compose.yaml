@@ -29,6 +29,9 @@ services:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator1:/node:ro
       - ../blockchain/besu/generated/validator1/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.24.0.11
 
   validator2:
     <<: *besu-common
@@ -40,6 +43,9 @@ services:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator2:/node:ro
       - ../blockchain/besu/generated/validator2/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.24.0.12
 
   validator3:
     <<: *besu-common
@@ -51,6 +57,9 @@ services:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator3:/node:ro
       - ../blockchain/besu/generated/validator3/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.24.0.13
 
   validator4:
     <<: *besu-common
@@ -62,6 +71,9 @@ services:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator4:/node:ro
       - ../blockchain/besu/generated/validator4/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.24.0.14
 
   rpcnode:
     <<: *besu-common
@@ -78,7 +90,13 @@ services:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/rpcnode:/node:ro
       - ../blockchain/besu/generated/rpcnode/data:/data
+    networks:
+      besu:
+        ipv4_address: 172.24.0.15
 
 networks:
   besu:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.24.0.0/24
