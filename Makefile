@@ -2,7 +2,7 @@ GITLEAKS_VERSION := v8.30.1
 BESU_VERSION := 26.6.1
 COMPOSE_FILE := infra/compose.yaml
 
-.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate up down logs network-status reset-demo deploy verify-deployment
+.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate up down logs network-status reset-demo deploy verify-deployment test-integration
 
 security: secret-scan
 
@@ -53,3 +53,7 @@ deploy:
 verify-deployment:
 	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
 		npm run verify-deployment
+
+test-integration:
+	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
+		npm run test:integration
