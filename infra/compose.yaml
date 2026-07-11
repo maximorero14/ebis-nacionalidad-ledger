@@ -7,14 +7,12 @@ x-besu-common: &besu-common
   restart: unless-stopped
   networks:
     - besu
-  volumes:
-    - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
   healthcheck:
-    test: ["CMD-SHELL", "besu --version >/dev/null 2>&1"]
-    interval: 30s
-    timeout: 10s
+    test: ["CMD", "bash", "/healthcheck.sh"]
+    interval: 15s
+    timeout: 5s
     retries: 5
-    start_period: 20s
+    start_period: 30s
   deploy:
     resources:
       limits:
@@ -29,6 +27,7 @@ services:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator1:/node:ro
       - ../blockchain/besu/generated/validator1/data:/data
+      - ../scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
     networks:
       besu:
         ipv4_address: 172.24.0.11
@@ -36,13 +35,15 @@ services:
   validator2:
     <<: *besu-common
     depends_on:
-      - validator1
+      validator1:
+        condition: service_healthy
     command:
       - --config-file=/node/config.toml
     volumes:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator2:/node:ro
       - ../blockchain/besu/generated/validator2/data:/data
+      - ../scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
     networks:
       besu:
         ipv4_address: 172.24.0.12
@@ -50,13 +51,15 @@ services:
   validator3:
     <<: *besu-common
     depends_on:
-      - validator1
+      validator1:
+        condition: service_healthy
     command:
       - --config-file=/node/config.toml
     volumes:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator3:/node:ro
       - ../blockchain/besu/generated/validator3/data:/data
+      - ../scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
     networks:
       besu:
         ipv4_address: 172.24.0.13
@@ -64,13 +67,15 @@ services:
   validator4:
     <<: *besu-common
     depends_on:
-      - validator1
+      validator1:
+        condition: service_healthy
     command:
       - --config-file=/node/config.toml
     volumes:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/validator4:/node:ro
       - ../blockchain/besu/generated/validator4/data:/data
+      - ../scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
     networks:
       besu:
         ipv4_address: 172.24.0.14
@@ -78,10 +83,14 @@ services:
   rpcnode:
     <<: *besu-common
     depends_on:
-      - validator1
-      - validator2
-      - validator3
-      - validator4
+      validator1:
+        condition: service_healthy
+      validator2:
+        condition: service_healthy
+      validator3:
+        condition: service_healthy
+      validator4:
+        condition: service_healthy
     command:
       - --config-file=/node/config.toml
     ports:
@@ -90,6 +99,13 @@ services:
       - ../blockchain/besu/generated/genesis.json:/config/genesis.json:ro
       - ../blockchain/besu/generated/rpcnode:/node:ro
       - ../blockchain/besu/generated/rpcnode/data:/data
+      - ../scripts/besu-healthcheck-rpc.sh:/healthcheck.sh:ro
+    healthcheck:
+      test: ["CMD", "bash", "/healthcheck.sh"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       besu:
         ipv4_address: 172.24.0.15
