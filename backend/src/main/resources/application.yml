@@ -16,6 +16,8 @@ app:
     jwt:
       secret: ${API_JWT_SECRET}
       ttl-minutes: 15
+    cors:
+      allowed-origins: ${API_ALLOWED_ORIGINS:http://localhost:5173}
   contracts:
     manifest-path: ${CONTRACTS_MANIFEST_PATH:../generated/deployments/besuLocal.json}
 
