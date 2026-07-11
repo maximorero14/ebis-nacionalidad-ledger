@@ -189,6 +189,38 @@ describe("NationalityCaseRegistry", function () {
     assert.equal(approved.status, 6);
   });
 
+  it("blocks granting both institutional roles to the same account", async function () {
+    const { registry, admin, foreignAffairs, police, other } =
+      await networkHelpers.loadFixture(deployRegistryFixture);
+
+    await assert.rejects(
+      registry.write.grantRole(
+        [await registry.read.POLICE_ROLE(), foreignAffairs.account.address],
+        { account: admin.account }
+      ),
+      /ExclusiveInstitutionRoles/
+    );
+    await assert.rejects(
+      registry.write.grantRole(
+        [await registry.read.FOREIGN_AFFAIRS_ROLE(), police.account.address],
+        { account: admin.account }
+      ),
+      /ExclusiveInstitutionRoles/
+    );
+
+    await registry.write.grantRole(
+      [await registry.read.FOREIGN_AFFAIRS_ROLE(), other.account.address],
+      { account: admin.account }
+    );
+    assert.equal(
+      await registry.read.hasRole([
+        await registry.read.FOREIGN_AFFAIRS_ROLE(),
+        other.account.address
+      ]),
+      true
+    );
+  });
+
   it("rejects invalid transitions and cross-role substitutions", async function () {
     const { token, registry, citizen, foreignAffairs, police } =
       await networkHelpers.loadFixture(deployRegistryFixture);

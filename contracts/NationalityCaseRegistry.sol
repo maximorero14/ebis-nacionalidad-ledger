@@ -64,6 +64,7 @@ contract NationalityCaseRegistry is AccessControl {
     error UnexpectedCredentialToken(uint256 caseId, uint256 tokenId);
     error ZeroAddress();
     error ZeroAmount();
+    error ExclusiveInstitutionRoles(address account);
 
     event CaseCreated(uint256 indexed caseId, address indexed owner);
     event DocumentsSubmitted(
@@ -124,6 +125,20 @@ contract NationalityCaseRegistry is AccessControl {
         _grantRole(FOREIGN_AFFAIRS_ROLE, admin);
         _grantRole(POLICE_ROLE, admin);
         _grantRole(CREDENTIAL_ISSUER_ROLE, admin);
+    }
+
+    /// @dev Blocks assigning both institutional roles to the same account going forward,
+    /// so the double-approval invariant can never be defeated by a role-assignment mistake.
+    /// Does not affect the bootstrap admin from the constructor; M5 deployment must move
+    /// that admin's institutional roles to separate accounts and revoke the extras.
+    function grantRole(bytes32 role, address account) public override onlyRole(getRoleAdmin(role)) {
+        if (role == FOREIGN_AFFAIRS_ROLE && hasRole(POLICE_ROLE, account)) {
+            revert ExclusiveInstitutionRoles(account);
+        }
+        if (role == POLICE_ROLE && hasRole(FOREIGN_AFFAIRS_ROLE, account)) {
+            revert ExclusiveInstitutionRoles(account);
+        }
+        _grantRole(role, account);
     }
 
     function createCase() external returns (uint256 caseId) {
