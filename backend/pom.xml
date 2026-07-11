@@ -37,6 +37,12 @@
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
     <dependency>
+      <!-- Spring Boot 4.1 extracted HealthIndicator/Health/Status into this dedicated
+           module; spring-boot-starter-actuator no longer pulls it in transitively. -->
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-health</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-jpa</artifactId>
     </dependency>
