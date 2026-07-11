@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Tag(name = "Credentials", description = "Consulta y revocacion de credenciales")
 public class CredentialController {
+
+    private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
 
     private final CredentialQueryService credentialQueryService;
     private final CredentialCommandService credentialCommandService;
@@ -53,10 +56,11 @@ public class CredentialController {
     public TransactionResponse revoke(
             @PathVariable long credentialId,
             @Valid @RequestBody ReasonCodeRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
         return TransactionResponse.from(
-                credentialCommandService.revoke(actor.role(), credentialId, request.reasonCode()));
+                credentialCommandService.revoke(actor.role(), credentialId, request.reasonCode(), idempotencyKey));
     }
 
     @ExceptionHandler(CaseNotFoundException.class)

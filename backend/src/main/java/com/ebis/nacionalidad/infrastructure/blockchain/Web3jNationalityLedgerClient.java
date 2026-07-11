@@ -5,10 +5,14 @@ import com.ebis.nacionalidad.domain.model.CaseEvent;
 import com.ebis.nacionalidad.domain.model.CaseStatus;
 import com.ebis.nacionalidad.domain.model.CredentialView;
 import com.ebis.nacionalidad.domain.model.OnChainCase;
+import com.ebis.nacionalidad.domain.model.TrackedTransaction;
 import com.ebis.nacionalidad.domain.model.TransactionOutcome;
+import com.ebis.nacionalidad.domain.model.TransactionStatus;
 import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
+import com.ebis.nacionalidad.domain.port.TransactionTrackingPort;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,11 +38,13 @@ import org.web3j.crypto.Credentials;
 import org.web3j.crypto.RawTransaction;
 import org.web3j.crypto.TransactionEncoder;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.response.EthCall;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.Log;
+import org.web3j.protocol.core.methods.response.Transaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.tx.response.PollingTransactionReceiptProcessor;
 import org.web3j.utils.Numeric;
@@ -165,23 +171,36 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
     private final Web3j web3j;
     private final ContractsManifest manifest;
     private final DemoActorCredentials actorCredentials;
+    private final NonceManager nonceManager;
+    private final TransactionTrackingPort transactionTracker;
     private final long chainId;
 
     public Web3jNationalityLedgerClient(
-            Web3j web3j, ContractsManifest manifest, DemoActorCredentials actorCredentials) {
+            Web3j web3j,
+            ContractsManifest manifest,
+            DemoActorCredentials actorCredentials,
+            NonceManager nonceManager,
+            TransactionTrackingPort transactionTracker) {
         this.web3j = web3j;
         this.manifest = manifest;
         this.actorCredentials = actorCredentials;
+        this.nonceManager = nonceManager;
+        this.transactionTracker = transactionTracker;
         this.chainId = manifest.chainId();
     }
 
     @Override
     public TransactionOutcome createCase(ApplicationRole actor) {
         Function function = new Function("createCase", List.of(), List.of());
-        TransactionReceipt receipt = send(actor, manifest.registryAddress(), function);
-        Long caseId = decodeCreatedCaseId(receipt);
-        return new TransactionOutcome(
-                receipt.getTransactionHash(), receipt.getBlockNumber(), receipt.isStatusOK(), caseId);
+        SendResult result = send(actor, manifest.registryAddress(), function);
+        if (result.receipt() != null && result.tracked().status() == TransactionStatus.CONFIRMED) {
+            Long caseId = decodeCreatedCaseId(result.receipt());
+            TrackedTransaction withCaseId =
+                    result.tracked().confirmed(result.tracked().blockNumber(), caseId, Instant.now());
+            transactionTracker.save(withCaseId);
+            return TransactionOutcome.from(withCaseId);
+        }
+        return toOutcome(result);
     }
 
     @Override
@@ -208,7 +227,12 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
                         "approve",
                         List.of(new Address(manifest.registryAddress()), new Uint256(feeAmount)),
                         List.of());
-        send(actor, manifest.tokenAddress(), approve);
+        SendResult approveResult = send(actor, manifest.tokenAddress(), approve);
+        if (approveResult.tracked().status() != TransactionStatus.CONFIRMED) {
+            // Do not attempt payFee if approve did not confirm: transferFrom would only
+            // fail on a stale allowance, wasting a nonce on a predictably-reverting call.
+            return toOutcome(approveResult);
+        }
 
         Function payFee = new Function("payFee", List.of(new Uint256(caseId)), List.of());
         return toOutcome(send(actor, manifest.registryAddress(), payFee));
@@ -441,15 +465,22 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
         }
     }
 
-    private TransactionReceipt send(ApplicationRole actor, String contractAddress, Function function) {
+    /** Carries the raw receipt (null on TIMEOUT, since none arrived) alongside the persisted record. */
+    private record SendResult(TransactionReceipt receipt, TrackedTransaction tracked) {}
+
+    private SendResult send(ApplicationRole actor, String contractAddress, Function function) {
         Credentials credentials = actorCredentials.forRole(actor);
+        String address = credentials.getAddress();
         String encodedFunction = FunctionEncoder.encode(function);
+        BigInteger nonce;
         try {
-            BigInteger nonce =
-                    web3j
-                            .ethGetTransactionCount(credentials.getAddress(), DefaultBlockParameterName.PENDING)
-                            .send()
-                            .getTransactionCount();
+            nonce = nonceManager.nextNonce(address);
+        } catch (IOException e) {
+            throw new BlockchainUnavailableException("Unable to resolve nonce for " + address, e);
+        }
+
+        String transactionHash;
+        try {
             RawTransaction rawTransaction =
                     RawTransaction.createTransaction(
                             nonce, GAS_PRICE, GAS_LIMIT, contractAddress, BigInteger.ZERO, encodedFunction);
@@ -457,23 +488,110 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
             EthSendTransaction response =
                     web3j.ethSendRawTransaction(Numeric.toHexString(signedMessage)).send();
             if (response.hasError()) {
+                nonceManager.release(address, nonce);
                 throw new ContractCallRevertedException(response.getError().getMessage());
             }
+            transactionHash = response.getTransactionHash();
+        } catch (IOException e) {
+            throw new BlockchainUnavailableException("Unable to send " + function.getName(), e);
+        }
+
+        Instant submittedAt = Instant.now();
+        transactionTracker.save(TrackedTransaction.pending(transactionHash, submittedAt));
+
+        TransactionReceipt receipt;
+        try {
             PollingTransactionReceiptProcessor receiptProcessor =
                     new PollingTransactionReceiptProcessor(
                             web3j, RECEIPT_POLL_INTERVAL_MS, RECEIPT_MAX_ATTEMPTS);
-            return receiptProcessor.waitForTransactionReceipt(response.getTransactionHash());
-        } catch (IOException e) {
-            throw new BlockchainUnavailableException("Unable to send " + function.getName(), e);
+            receipt = receiptProcessor.waitForTransactionReceipt(transactionHash);
         } catch (org.web3j.protocol.exceptions.TransactionException e) {
-            throw new BlockchainUnavailableException(
-                    "Transaction for " + function.getName() + " was not mined in time", e);
+            // Not a failure: the receipt simply did not arrive within the polling window.
+            // Never resubmit here — GET /transactions/{hash} reconciles this later by
+            // re-checking the receipt, the only safe way to resolve a TIMEOUT.
+            TrackedTransaction timedOut =
+                    TrackedTransaction.pending(transactionHash, submittedAt).timedOut(Instant.now());
+            transactionTracker.save(timedOut);
+            return new SendResult(null, timedOut);
+        } catch (IOException e) {
+            throw new BlockchainUnavailableException("Unable to poll receipt for " + transactionHash, e);
+        }
+
+        TrackedTransaction pending = TrackedTransaction.pending(transactionHash, submittedAt);
+        TrackedTransaction concluded;
+        if (receipt.isStatusOK()) {
+            concluded = pending.confirmed(receipt.getBlockNumber(), null, Instant.now());
+        } else {
+            CustomErrorDecoder.DecodedError decoded =
+                    decodeRevertReason(address, contractAddress, encodedFunction, receipt.getBlockNumber());
+            concluded = pending.reverted(receipt.getBlockNumber(), decoded.code(), decoded.message(), Instant.now());
+        }
+        transactionTracker.save(concluded);
+        return new SendResult(receipt, concluded);
+    }
+
+    private CustomErrorDecoder.DecodedError decodeRevertReason(
+            String from, String to, String encodedFunction, BigInteger blockNumber) {
+        try {
+            EthCall response =
+                    web3j
+                            .ethCall(
+                                    org.web3j.protocol.core.methods.request.Transaction.createEthCallTransaction(
+                                            from, to, encodedFunction),
+                                    DefaultBlockParameter.valueOf(blockNumber))
+                            .send();
+            // Besu returns the raw ABI-encoded custom error (selector + args) in the
+            // JSON-RPC error's own "data" field; web3j's getRevertReasonEncodedData()
+            // does not reliably surface this for custom errors (only for Error(string)),
+            // so the error's data is read directly instead.
+            String revertData = response.hasError() ? response.getError().getData() : null;
+            return CustomErrorDecoder.decode(revertData);
+        } catch (IOException e) {
+            return new CustomErrorDecoder.DecodedError(
+                    "UNKNOWN_REVERT", "Unable to determine revert reason: " + e.getMessage());
         }
     }
 
-    private TransactionOutcome toOutcome(TransactionReceipt receipt) {
-        return new TransactionOutcome(
-                receipt.getTransactionHash(), receipt.getBlockNumber(), receipt.isStatusOK());
+    @Override
+    public Optional<TransactionOutcome> checkReceipt(String transactionHash) {
+        try {
+            Optional<TransactionReceipt> receiptOpt =
+                    web3j.ethGetTransactionReceipt(transactionHash).send().getTransactionReceipt();
+            if (receiptOpt.isEmpty()) {
+                return Optional.empty();
+            }
+            TransactionReceipt receipt = receiptOpt.get();
+            if (receipt.isStatusOK()) {
+                Long caseId = decodeCreatedCaseId(receipt);
+                return Optional.of(
+                        new TransactionOutcome(
+                                transactionHash, receipt.getBlockNumber(), TransactionStatus.CONFIRMED, caseId,
+                                null, null));
+            }
+            Transaction original =
+                    web3j
+                            .ethGetTransactionByHash(transactionHash)
+                            .send()
+                            .getTransaction()
+                            .orElseThrow(
+                                    () ->
+                                            new BlockchainUnavailableException(
+                                                    "Mined transaction " + transactionHash + " has no original data",
+                                                    null));
+            CustomErrorDecoder.DecodedError decoded =
+                    decodeRevertReason(
+                            original.getFrom(), original.getTo(), original.getInput(), receipt.getBlockNumber());
+            return Optional.of(
+                    new TransactionOutcome(
+                            transactionHash, receipt.getBlockNumber(), TransactionStatus.REVERTED, null,
+                            decoded.code(), decoded.message()));
+        } catch (IOException e) {
+            throw new BlockchainUnavailableException("Unable to check receipt for " + transactionHash, e);
+        }
+    }
+
+    private TransactionOutcome toOutcome(SendResult result) {
+        return TransactionOutcome.from(result.tracked());
     }
 
     private Long decodeCreatedCaseId(TransactionReceipt receipt) {

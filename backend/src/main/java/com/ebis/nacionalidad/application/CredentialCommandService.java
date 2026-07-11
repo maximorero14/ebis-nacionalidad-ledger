@@ -11,16 +11,23 @@ import org.web3j.crypto.Hash;
 public class CredentialCommandService {
 
     private final NationalityLedgerClient ledgerClient;
+    private final TransactionTrackingService transactionTrackingService;
 
-    public CredentialCommandService(NationalityLedgerClient ledgerClient) {
+    public CredentialCommandService(
+            NationalityLedgerClient ledgerClient, TransactionTrackingService transactionTrackingService) {
         this.ledgerClient = ledgerClient;
+        this.transactionTrackingService = transactionTrackingService;
     }
 
-    public TransactionOutcome revoke(ApplicationRole actor, long credentialId, String reasonCode) {
+    public TransactionOutcome revoke(
+            ApplicationRole actor, long credentialId, String reasonCode, String idempotencyKey) {
         if (actor != ApplicationRole.CREDENTIAL_ISSUER) {
             throw new WrongRoleException(ApplicationRole.CREDENTIAL_ISSUER);
         }
-        return ledgerClient.revokeCredential(
-                actor, credentialId, Hash.sha3(reasonCode.getBytes(StandardCharsets.UTF_8)));
+        return transactionTrackingService.runIdempotent(
+                idempotencyKey,
+                () ->
+                        ledgerClient.revokeCredential(
+                                actor, credentialId, Hash.sha3(reasonCode.getBytes(StandardCharsets.UTF_8))));
     }
 }

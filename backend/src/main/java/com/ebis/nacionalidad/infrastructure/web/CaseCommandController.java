@@ -14,12 +14,15 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Tag(name = "Cases", description = "Ciclo de vida del expediente")
 public class CaseCommandController {
+
+    private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
 
     private final CaseCommandService caseCommandService;
 
@@ -29,9 +32,11 @@ public class CaseCommandController {
 
     @PostMapping("/cases")
     @Operation(summary = "Crea un expediente propio (ciudadano)")
-    public CreateCaseResponse createCase(@AuthenticationPrincipal Jwt jwt) {
+    public CreateCaseResponse createCase(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return CreateCaseResponse.from(caseCommandService.createCase(actor.role()));
+        return CreateCaseResponse.from(caseCommandService.createCase(actor.role(), idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/documents")
@@ -39,10 +44,12 @@ public class CaseCommandController {
     public SubmitDocumentsResponse submitDocuments(
             @PathVariable long caseId,
             @Valid @RequestBody SubmitDocumentsRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
         return SubmitDocumentsResponse.from(
-                caseCommandService.submitDocuments(actor.role(), caseId, request.documentReference()));
+                caseCommandService.submitDocuments(
+                        actor.role(), caseId, request.documentReference(), idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/resubmit")
@@ -50,22 +57,29 @@ public class CaseCommandController {
     public SubmitDocumentsResponse resubmit(
             @PathVariable long caseId,
             @Valid @RequestBody SubmitDocumentsRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
-        return submitDocuments(caseId, request, jwt);
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
+        return submitDocuments(caseId, request, jwt, idempotencyKey);
     }
 
     @PostMapping("/cases/{caseId}/faucet")
     @Operation(summary = "Reclama Euro Digital demo para pagar la tasa (ciudadano titular)")
-    public TransactionResponse claimFaucet(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
+    public TransactionResponse claimFaucet(
+            @PathVariable long caseId,
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return TransactionResponse.from(caseCommandService.claimFaucet(actor.role()));
+        return TransactionResponse.from(caseCommandService.claimFaucet(actor.role(), idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/fee")
     @Operation(summary = "Aprueba y paga la tasa administrativa (ciudadano titular)")
-    public TransactionResponse payFee(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
+    public TransactionResponse payFee(
+            @PathVariable long caseId,
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return TransactionResponse.from(caseCommandService.payFee(actor.role(), caseId));
+        return TransactionResponse.from(caseCommandService.payFee(actor.role(), caseId, idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/remediation")
@@ -73,25 +87,32 @@ public class CaseCommandController {
     public TransactionResponse requestRemediation(
             @PathVariable long caseId,
             @Valid @RequestBody ReasonCodeRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
         return TransactionResponse.from(
-                caseCommandService.requestRemediation(actor.role(), caseId, request.reasonCode()));
+                caseCommandService.requestRemediation(actor.role(), caseId, request.reasonCode(), idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/foreign-affairs-approval")
     @Operation(summary = "Aprobacion de extranjeria")
     public TransactionResponse approveForeignAffairs(
-            @PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
+            @PathVariable long caseId,
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return TransactionResponse.from(caseCommandService.approveForeignAffairs(actor.role(), caseId));
+        return TransactionResponse.from(
+                caseCommandService.approveForeignAffairs(actor.role(), caseId, idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/police-approval")
     @Operation(summary = "Aprobacion de policia")
-    public TransactionResponse approvePolice(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
+    public TransactionResponse approvePolice(
+            @PathVariable long caseId,
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return TransactionResponse.from(caseCommandService.approvePolice(actor.role(), caseId));
+        return TransactionResponse.from(caseCommandService.approvePolice(actor.role(), caseId, idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/reject")
@@ -99,17 +120,21 @@ public class CaseCommandController {
     public TransactionResponse rejectCase(
             @PathVariable long caseId,
             @Valid @RequestBody ReasonCodeRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
         return TransactionResponse.from(
-                caseCommandService.rejectCase(actor.role(), caseId, request.reasonCode()));
+                caseCommandService.rejectCase(actor.role(), caseId, request.reasonCode(), idempotencyKey));
     }
 
     @PostMapping("/cases/{caseId}/credential")
     @Operation(summary = "Emite la credencial tras la doble aprobacion (emisor)")
-    public TransactionResponse issueCredential(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
+    public TransactionResponse issueCredential(
+            @PathVariable long caseId,
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return TransactionResponse.from(caseCommandService.issueCredential(actor.role(), caseId));
+        return TransactionResponse.from(caseCommandService.issueCredential(actor.role(), caseId, idempotencyKey));
     }
 
     @ExceptionHandler(WrongRoleException.class)
@@ -124,9 +149,10 @@ public class CaseCommandController {
         return new ErrorResponse(exception.getMessage());
     }
 
-    // Coarse for now: M6.4 owns mapping each Solidity custom error to a specific HTTP
-    // status/domain error. Surfacing the raw revert reason keeps this endpoint honest and
-    // usable in the meantime instead of a generic, uninformative 500.
+    // A mined-but-reverted transaction is now surfaced as TransactionResponse{status:
+    // REVERTED, errorCode, errorMessage} instead of an exception (see M6.4 evidence).
+    // This handler only remains for a genuine RPC-level rejection before the node ever
+    // accepts the transaction (e.g. malformed payload) — distinct from "mined but reverted".
     @ExceptionHandler(ContractCallRevertedException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handleContractReverted(ContractCallRevertedException exception) {

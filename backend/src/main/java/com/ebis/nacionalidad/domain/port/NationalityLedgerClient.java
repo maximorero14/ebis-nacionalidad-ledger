@@ -44,4 +44,12 @@ public interface NationalityLedgerClient {
     boolean isCredentialValid(long caseId);
 
     List<CaseEvent> readTimeline(long caseId);
+
+    /**
+     * Non-blocking single check of a transaction already known by hash (no polling wait);
+     * empty if it has not been mined yet. Used to reconcile a transaction that was left
+     * {@code PENDING}/{@code TIMEOUT} by the original submitting request (see
+     * TransactionTrackingService).
+     */
+    Optional<TransactionOutcome> checkReceipt(String transactionHash);
 }

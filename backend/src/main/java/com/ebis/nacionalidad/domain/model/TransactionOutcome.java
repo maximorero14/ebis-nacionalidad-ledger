@@ -3,15 +3,29 @@ package com.ebis.nacionalidad.domain.model;
 import java.math.BigInteger;
 
 /**
- * Result of a mined transaction. {@code caseId} is only populated by {@code createCase}
- * (decoded from the emitted CaseCreated event); every other call leaves it null. M6.4
- * will wrap this with an async PENDING/CONFIRMED/REVERTED lifecycle; for now every call
- * in M6.3 waits synchronously for the receipt.
+ * Result of submitting a transaction, exposing the real lifecycle state instead of a
+ * collapsed success/failure boolean (see {@link TransactionStatus}). {@code caseId} is
+ * only populated by {@code createCase} (decoded from the emitted CaseCreated event) once
+ * {@code status == CONFIRMED}. {@code errorCode}/{@code errorMessage} are only populated
+ * when {@code status == REVERTED} (see CustomErrorDecoder); {@code blockNumber} is only
+ * populated once the transaction is actually mined (CONFIRMED or REVERTED, never PENDING
+ * or TIMEOUT).
  */
 public record TransactionOutcome(
-        String transactionHash, BigInteger blockNumber, boolean successful, Long caseId) {
+        String transactionHash,
+        BigInteger blockNumber,
+        TransactionStatus status,
+        Long caseId,
+        String errorCode,
+        String errorMessage) {
 
-    public TransactionOutcome(String transactionHash, BigInteger blockNumber, boolean successful) {
-        this(transactionHash, blockNumber, successful, null);
+    public static TransactionOutcome from(TrackedTransaction tracked) {
+        return new TransactionOutcome(
+                tracked.transactionHash(),
+                tracked.blockNumber(),
+                tracked.status(),
+                tracked.caseId(),
+                tracked.errorCode(),
+                tracked.errorMessage());
     }
 }
