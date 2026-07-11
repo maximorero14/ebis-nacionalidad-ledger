@@ -14,19 +14,15 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
-import org.web3j.abi.EventEncoder;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.Bool;
-import org.web3j.abi.datatypes.Event;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.Utf8String;
@@ -50,11 +46,12 @@ import org.web3j.tx.response.PollingTransactionReceiptProcessor;
 import org.web3j.utils.Numeric;
 
 /**
- * The only class allowed to import web3j types outside {@code Web3jBesuBlockchainClient};
- * hand-rolls ABI encoding instead of using web3j-codegen wrapper classes, keeping the
- * three contracts' interaction surface auditable in one place without a code-generation
- * build step. gasPrice is always pinned to 0 explicitly (see docs/evidencias/M5_DESPLIEGUE.md
- * — automatic fee estimation is non-zero even on this zero-basefee network).
+ * Along with {@code Web3jBesuBlockchainClient} and {@code RegistryEventDecoder} (its event
+ * decoding helper), the only classes allowed to import web3j types; hand-rolls ABI encoding
+ * instead of using web3j-codegen wrapper classes, keeping the three contracts' interaction
+ * surface auditable in one place without a code-generation build step. gasPrice is always
+ * pinned to 0 explicitly (see docs/evidencias/M5_DESPLIEGUE.md — automatic fee estimation is
+ * non-zero even on this zero-basefee network).
  */
 @Component
 @Profile("!test")
@@ -64,109 +61,6 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
     private static final BigInteger GAS_LIMIT = BigInteger.valueOf(1_000_000);
     private static final long RECEIPT_POLL_INTERVAL_MS = 500;
     private static final int RECEIPT_MAX_ATTEMPTS = 60;
-
-    private static final Event CASE_CREATED_EVENT =
-            new Event(
-                    "CaseCreated",
-                    List.of(new TypeReference<Uint256>(true) {}, new TypeReference<Address>(true) {}));
-
-    /**
-     * Every registry event that can appear in a case's timeline, in the order its parameters
-     * are declared in NationalityCaseRegistry.sol (indexed parameters first, matching how
-     * {@link Event#getIndexedParameters()} groups them, followed by the non-indexed ones in
-     * declaration order) so {@link #readTimeline(long)} can decode each log generically
-     * instead of special-casing one event.
-     */
-    private static final List<TimelineEventDescriptor> TIMELINE_EVENTS =
-            List.of(
-                    new TimelineEventDescriptor(
-                            CASE_CREATED_EVENT, List.of("caseId", "owner"), List.of()),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "DocumentsSubmitted",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Address>(true) {},
-                                            new TypeReference<Uint64>(false) {},
-                                            new TypeReference<Bytes32>(false) {})),
-                            List.of("caseId", "owner"),
-                            List.of("round", "documentCommitment")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "FeePaid",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Address>(true) {},
-                                            new TypeReference<Uint256>(false) {},
-                                            new TypeReference<Address>(true) {})),
-                            List.of("caseId", "payer", "treasury"),
-                            List.of("amount")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "CaseEnteredReview",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Uint64>(false) {})),
-                            List.of("caseId"),
-                            List.of("round")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "RemediationRequested",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Address>(true) {},
-                                            new TypeReference<Uint64>(false) {},
-                                            new TypeReference<Bytes32>(false) {})),
-                            List.of("caseId", "actor"),
-                            List.of("nextRound", "reasonCode")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "ForeignAffairsApproved",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Address>(true) {},
-                                            new TypeReference<Uint64>(false) {})),
-                            List.of("caseId", "actor"),
-                            List.of("round")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "PoliceApproved",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Address>(true) {},
-                                            new TypeReference<Uint64>(false) {})),
-                            List.of("caseId", "actor"),
-                            List.of("round")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "CaseApproved",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Uint64>(false) {})),
-                            List.of("caseId"),
-                            List.of("round")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "CaseRejected",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Address>(true) {},
-                                            new TypeReference<Uint64>(false) {},
-                                            new TypeReference<Bytes32>(false) {})),
-                            List.of("caseId", "actor"),
-                            List.of("round", "reasonCode")),
-                    new TimelineEventDescriptor(
-                            new Event(
-                                    "CredentialIssued",
-                                    List.of(
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Uint256>(true) {},
-                                            new TypeReference<Address>(true) {})),
-                            List.of("caseId", "tokenId", "holder"),
-                            List.of()));
-
-    private record TimelineEventDescriptor(
-            Event event, List<String> indexedNames, List<String> nonIndexedNames) {}
 
     private final Web3j web3j;
     private final ContractsManifest manifest;
@@ -371,74 +265,53 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
 
     @Override
     public List<CaseEvent> readTimeline(long caseId) {
+        return fetchRegistryEvents(BigInteger.ZERO).stream()
+                .filter(event -> event.caseId() == caseId)
+                .map(event -> new CaseEvent(event.eventName(), event.blockNumber(), event.transactionHash(), event.data()))
+                .toList();
+    }
+
+    @Override
+    public List<CaseEvent> readAllEventsFrom(BigInteger fromBlock) {
+        return fetchRegistryEvents(fromBlock).stream()
+                .map(event -> new CaseEvent(event.eventName(), event.blockNumber(), event.transactionHash(), event.data()))
+                .toList();
+    }
+
+    @Override
+    public BigInteger registryDeploymentBlock() {
+        return manifest.registryDeploymentBlock();
+    }
+
+    /**
+     * Besu enforces a default {@code eth_getLogs} range cap of 5000 blocks
+     * ({@code --rpc-max-logs-range}); confirmed empirically against the live node
+     * ("Requested range exceeds maximum RPC range limit" past that span). Both
+     * {@link #readTimeline} (from block 0) and the M6.5 projection (from an arbitrary
+     * cursor) can easily exceed that once the chain has been running a while, so every
+     * query pages through in bounded chunks instead of one unbounded {@code eth_getLogs}.
+     */
+    private static final BigInteger MAX_LOG_RANGE = BigInteger.valueOf(5000);
+
+    private List<RegistryEventDecoder.DecodedEvent> fetchRegistryEvents(BigInteger fromBlock) {
         try {
-            EthFilter filter =
-                    new EthFilter(
-                            DefaultBlockParameterName.EARLIEST,
-                            DefaultBlockParameterName.LATEST,
-                            manifest.registryAddress());
-            List<Log> logs =
-                    web3j.ethGetLogs(filter).send().getLogs().stream()
-                            .map(result -> (Log) result.get())
-                            .toList();
-
-            Map<String, TimelineEventDescriptor> descriptorsBySignature = new LinkedHashMap<>();
-            for (TimelineEventDescriptor descriptor : TIMELINE_EVENTS) {
-                descriptorsBySignature.put(EventEncoder.encode(descriptor.event()), descriptor);
+            BigInteger latest = web3j.ethBlockNumber().send().getBlockNumber();
+            List<Log> logs = new ArrayList<>();
+            BigInteger chunkStart = fromBlock;
+            while (chunkStart.compareTo(latest) <= 0) {
+                BigInteger chunkEnd = chunkStart.add(MAX_LOG_RANGE).min(latest);
+                EthFilter filter =
+                        new EthFilter(
+                                DefaultBlockParameter.valueOf(chunkStart),
+                                DefaultBlockParameter.valueOf(chunkEnd),
+                                manifest.registryAddress());
+                web3j.ethGetLogs(filter).send().getLogs().stream().map(result -> (Log) result.get()).forEach(logs::add);
+                chunkStart = chunkEnd.add(BigInteger.ONE);
             }
-
-            List<CaseEvent> timeline = new ArrayList<>();
-            for (Log log : logs) {
-                if (log.getTopics().isEmpty()) {
-                    continue;
-                }
-                TimelineEventDescriptor descriptor = descriptorsBySignature.get(log.getTopics().get(0));
-                if (descriptor == null) {
-                    continue;
-                }
-                CaseEvent event = decodeTimelineEvent(descriptor, log, caseId);
-                if (event != null) {
-                    timeline.add(event);
-                }
-            }
-            timeline.sort((a, b) -> a.blockNumber().compareTo(b.blockNumber()));
-            return timeline;
+            return RegistryEventDecoder.decodeAll(logs);
         } catch (IOException e) {
-            throw new BlockchainUnavailableException("Unable to read case timeline", e);
+            throw new BlockchainUnavailableException("Unable to read registry events", e);
         }
-    }
-
-    private CaseEvent decodeTimelineEvent(TimelineEventDescriptor descriptor, Log log, long caseId) {
-        List<TypeReference<Type>> indexedParams = descriptor.event().getIndexedParameters();
-        // caseId is always the first indexed parameter in every registry event.
-        BigInteger loggedCaseId =
-                (BigInteger)
-                        FunctionReturnDecoder.decodeIndexedValue(log.getTopics().get(1), indexedParams.get(0))
-                                .getValue();
-        if (loggedCaseId.longValueExact() != caseId) {
-            return null;
-        }
-
-        Map<String, String> data = new LinkedHashMap<>();
-        for (int i = 0; i < indexedParams.size(); i++) {
-            Type value = FunctionReturnDecoder.decodeIndexedValue(log.getTopics().get(i + 1), indexedParams.get(i));
-            data.put(descriptor.indexedNames().get(i), typeToString(value));
-        }
-        List<Type> nonIndexedValues =
-                FunctionReturnDecoder.decode(log.getData(), descriptor.event().getNonIndexedParameters());
-        for (int i = 0; i < nonIndexedValues.size(); i++) {
-            data.put(descriptor.nonIndexedNames().get(i), typeToString(nonIndexedValues.get(i)));
-        }
-
-        return new CaseEvent(descriptor.event().getName(), log.getBlockNumber(), log.getTransactionHash(), data);
-    }
-
-    private static String typeToString(Type value) {
-        Object raw = value.getValue();
-        if (raw instanceof byte[] bytes) {
-            return Numeric.toHexString(bytes);
-        }
-        return raw.toString();
     }
 
     private BigInteger readFeeAmount() {
@@ -595,16 +468,10 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
     }
 
     private Long decodeCreatedCaseId(TransactionReceipt receipt) {
-        String signature = EventEncoder.encode(CASE_CREATED_EVENT);
-        for (Log log : receipt.getLogs()) {
-            if (!log.getTopics().isEmpty() && log.getTopics().get(0).equals(signature)) {
-                return ((BigInteger)
-                                FunctionReturnDecoder.decodeIndexedValue(
-                                                log.getTopics().get(1), new TypeReference<Uint256>() {})
-                                        .getValue())
-                        .longValueExact();
-            }
-        }
-        return null;
+        return RegistryEventDecoder.decodeAll(receipt.getLogs()).stream()
+                .filter(event -> event.eventName().equals("CaseCreated"))
+                .map(RegistryEventDecoder.DecodedEvent::caseId)
+                .findFirst()
+                .orElse(null);
     }
 }

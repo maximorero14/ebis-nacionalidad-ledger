@@ -5,6 +5,7 @@ import com.ebis.nacionalidad.domain.model.CaseEvent;
 import com.ebis.nacionalidad.domain.model.CredentialView;
 import com.ebis.nacionalidad.domain.model.OnChainCase;
 import com.ebis.nacionalidad.domain.model.TransactionOutcome;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,6 +45,16 @@ public interface NationalityLedgerClient {
     boolean isCredentialValid(long caseId);
 
     List<CaseEvent> readTimeline(long caseId);
+
+    /**
+     * Every registry event from {@code fromBlock} to the chain's current head, across every
+     * case — the raw material the M6.5 projection folds into {@code case_projection}.
+     * Unlike {@link #readTimeline(long)}, this is not filtered to one case.
+     */
+    List<CaseEvent> readAllEventsFrom(BigInteger fromBlock);
+
+    /** The block the registry contract was deployed at — the earliest block worth scanning. */
+    BigInteger registryDeploymentBlock();
 
     /**
      * Non-blocking single check of a transaction already known by hash (no polling wait);

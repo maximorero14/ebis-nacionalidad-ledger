@@ -3,6 +3,7 @@ package com.ebis.nacionalidad.infrastructure.blockchain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,10 +34,12 @@ public class ContractsManifestLoader {
             throws IOException {
         JsonNode root = objectMapper.readTree(Files.readString(Path.of(manifestPath)));
         JsonNode contracts = root.get("contracts");
+        JsonNode registry = contracts.get("NationalityCaseRegistry");
         return new ContractsManifest(
                 root.get("chainId").asLong(),
                 contracts.get("DigitalEuroDemo").get("address").asText(),
                 contracts.get("NationalityCredential").get("address").asText(),
-                contracts.get("NationalityCaseRegistry").get("address").asText());
+                registry.get("address").asText(),
+                new BigInteger(registry.get("blockNumber").asText()));
     }
 }

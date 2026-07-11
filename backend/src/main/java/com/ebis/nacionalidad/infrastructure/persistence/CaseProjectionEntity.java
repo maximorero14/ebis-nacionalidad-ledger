@@ -33,6 +33,19 @@ public class CaseProjectionEntity {
         // JPA
     }
 
+    public CaseProjectionEntity(
+            Long caseId,
+            String ownerAddress,
+            com.ebis.nacionalidad.domain.model.CaseStatus status,
+            long reviewRound,
+            Instant updatedAt) {
+        this.caseId = caseId;
+        this.ownerAddress = ownerAddress;
+        this.status = status;
+        this.reviewRound = reviewRound;
+        this.updatedAt = updatedAt;
+    }
+
     public Long getCaseId() {
         return caseId;
     }
