@@ -2,11 +2,14 @@ import { apiClient } from "../../api/client";
 import { transactionOutcomeSchema, type TransactionOutcome } from "../transactions/schemas";
 import {
   caseResponseSchema,
+  caseSummaryListSchema,
   caseTimelineSchema,
   createCaseResponseSchema,
   submitDocumentsResponseSchema,
   type CaseEvent,
   type CaseResponse,
+  type CaseStatus,
+  type CaseSummary,
   type CreateCaseResponse,
   type SubmitDocumentsResponse
 } from "./schemas";
@@ -55,6 +58,43 @@ export function claimFaucet(caseId: number, idempotencyKey?: string): Promise<Tr
 
 export function payFee(caseId: number, idempotencyKey?: string): Promise<TransactionOutcome> {
   return apiClient.post(`/cases/${caseId}/fee`, transactionOutcomeSchema, {
+    ...(idempotencyKey ? { idempotencyKey } : {})
+  });
+}
+
+/** Institutional-only inbox (see docs/evidencias/M7_FRONTEND.md for why GET /cases exists). */
+export function listCases(status?: CaseStatus): Promise<CaseSummary[]> {
+  const query = status ? `?status=${status}` : "";
+  return apiClient.get(`/cases${query}`, caseSummaryListSchema);
+}
+
+export function requestRemediation(
+  caseId: number,
+  reasonCode: string,
+  idempotencyKey?: string
+): Promise<TransactionOutcome> {
+  return apiClient.post(`/cases/${caseId}/remediation`, transactionOutcomeSchema, {
+    body: { reasonCode },
+    ...(idempotencyKey ? { idempotencyKey } : {})
+  });
+}
+
+export function approveForeignAffairs(
+  caseId: number,
+  idempotencyKey?: string
+): Promise<TransactionOutcome> {
+  return apiClient.post(`/cases/${caseId}/foreign-affairs-approval`, transactionOutcomeSchema, {
+    ...(idempotencyKey ? { idempotencyKey } : {})
+  });
+}
+
+export function rejectCase(
+  caseId: number,
+  reasonCode: string,
+  idempotencyKey?: string
+): Promise<TransactionOutcome> {
+  return apiClient.post(`/cases/${caseId}/reject`, transactionOutcomeSchema, {
+    body: { reasonCode },
     ...(idempotencyKey ? { idempotencyKey } : {})
   });
 }

@@ -60,3 +60,20 @@ export const caseEventSchema = z.object({
 export type CaseEvent = z.infer<typeof caseEventSchema>;
 
 export const caseTimelineSchema = z.array(caseEventSchema);
+
+/**
+ * Mirrors backend CaseSummaryResponse (infrastructure/web/CaseSummaryResponse.java) — the
+ * GET /cases inbox for institutional roles. Backed by case_projection (M6.5), not a live
+ * chain read: can lag the real on-chain state by up to the scheduler's 10s tick, and does
+ * not carry foreignAffairsApproved/policeApproved (only the full CaseResponse does).
+ */
+export const caseSummaryResponseSchema = z.object({
+  caseId: z.number(),
+  ownerAddress: z.string(),
+  status: caseStatusSchema,
+  reviewRound: z.number(),
+  updatedAt: z.string()
+});
+export type CaseSummary = z.infer<typeof caseSummaryResponseSchema>;
+
+export const caseSummaryListSchema = z.array(caseSummaryResponseSchema);

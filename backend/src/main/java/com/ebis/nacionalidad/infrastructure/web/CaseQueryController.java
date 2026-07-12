@@ -3,7 +3,9 @@ package com.ebis.nacionalidad.infrastructure.web;
 import com.ebis.nacionalidad.application.CaseAccessDeniedException;
 import com.ebis.nacionalidad.application.CaseNotFoundException;
 import com.ebis.nacionalidad.application.CaseQueryService;
+import com.ebis.nacionalidad.application.WrongRoleException;
 import com.ebis.nacionalidad.domain.model.CaseEvent;
+import com.ebis.nacionalidad.domain.model.CaseStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
@@ -13,6 +15,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -44,6 +47,27 @@ public class CaseQueryController {
     public List<CaseEvent> getTimeline(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
         AuthenticatedActor actor = AuthenticatedActor.from(jwt);
         return caseQueryService.getTimeline(caseId, actor.role(), actor.evmAddress());
+    }
+
+    @GetMapping("/cases")
+    @Operation(
+            summary = "Bandeja de expedientes (solo roles institucionales)",
+            description =
+                    "Lee case_projection (M6.5), no la cadena directamente: puede quedar hasta 10s "
+                            + "detras del estado on-chain real entre ciclos del scheduler. Filtro "
+                            + "opcional por status.")
+    public List<CaseSummaryResponse> listCases(
+            @RequestParam(required = false) CaseStatus status, @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedActor actor = AuthenticatedActor.from(jwt);
+        return caseQueryService.listCases(actor.role(), status).stream()
+                .map(CaseSummaryResponse::from)
+                .toList();
+    }
+
+    @ExceptionHandler(WrongRoleException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ErrorResponse handleWrongRole(WrongRoleException exception) {
+        return new ErrorResponse(exception.getMessage());
     }
 
     @ExceptionHandler(CaseNotFoundException.class)
