@@ -1,0 +1,31 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.form {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.section {
+  margin-top: var(--space-4);
+}
+
+.technical {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-neutral-bg);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
