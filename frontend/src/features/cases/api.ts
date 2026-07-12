@@ -88,6 +88,15 @@ export function approveForeignAffairs(
   });
 }
 
+export function approvePolice(
+  caseId: number,
+  idempotencyKey?: string
+): Promise<TransactionOutcome> {
+  return apiClient.post(`/cases/${caseId}/police-approval`, transactionOutcomeSchema, {
+    ...(idempotencyKey ? { idempotencyKey } : {})
+  });
+}
+
 export function rejectCase(
   caseId: number,
   reasonCode: string,

@@ -10,6 +10,7 @@ import { CaseDetailPage } from "../pages/portals/CaseDetailPage";
 import { ForeignAffairsPortalPage } from "../pages/portals/ForeignAffairsPortalPage";
 import { ForeignAffairsCaseDetailPage } from "../pages/portals/ForeignAffairsCaseDetailPage";
 import { PolicePortalPage } from "../pages/portals/PolicePortalPage";
+import { PoliceCaseDetailPage } from "../pages/portals/PoliceCaseDetailPage";
 import { VerifierPortalPage } from "../pages/portals/VerifierPortalPage";
 import { CredentialIssuerPortalPage } from "../pages/portals/CredentialIssuerPortalPage";
 
@@ -38,7 +39,10 @@ export const router = createBrowserRouter([
       },
       {
         element: <ProtectedRoute allowedRoles={["POLICE"]} />,
-        children: [{ path: "policia", element: <PolicePortalPage /> }]
+        children: [
+          { path: "policia", element: <PolicePortalPage /> },
+          { path: "policia/expedientes/:caseId", element: <PoliceCaseDetailPage /> }
+        ]
       },
       {
         element: <ProtectedRoute allowedRoles={["CREDENTIAL_ISSUER"]} />,

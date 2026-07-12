@@ -1,17 +1,27 @@
 /**
- * The backend hashes reasonCode with keccak256 before writing it on-chain
- * (CaseCommandService.hashReasonCode) — it is never stored or recoverable as text. Two
- * officers describing the same real-world reason with slightly different wording produce
- * two different, unrelated hashes. A fixed catalog keeps reasons comparable across cases
- * instead of silently fragmenting into one-off hashes; "otro" still allows free text for
- * whatever this catalog doesn't cover.
+ * Closed catalogs, not free text — this mirrors docs/FUNCIONAL.md ("Politicas de codigos
+ * no sensibles"): reasonCode is hashed with keccak256 before going on-chain
+ * (CaseCommandService.hashReasonCode), so a free-text field would let an officer type
+ * anything (a name, a date, a real detail) into something that becomes a permanent,
+ * un-erasable on-chain commitment — exactly what INV-011/T-005 (no PII on-chain) forbid.
+ * The frontend is currently the only layer enforcing this closed set (the backend only
+ * checks @NotBlank), so it must not offer an escape hatch.
  */
-export const REASON_CODE_CATALOG = [
-  { value: "documento-ilegible", label: "Documento ilegible" },
-  { value: "documento-faltante", label: "Falta un documento requerido" },
-  { value: "datos-inconsistentes", label: "Datos inconsistentes entre documentos" },
-  { value: "identidad-no-verificable", label: "Identidad no verificable" },
-  { value: "otro", label: "Otro (especificar)" }
+export const REMEDIATION_REASON_CODES = [
+  { value: "MISSING_DEMO_DOCUMENT", label: "Falta un documento requerido" },
+  { value: "INVALID_DEMO_FORMAT", label: "Formato de documento invalido" },
+  { value: "INCONSISTENT_DEMO_REFERENCE", label: "Referencia documental inconsistente" },
+  { value: "AGE_COMMITMENT_REQUIRED", label: "Falta el compromiso de mayoria de edad" }
 ] as const;
 
-export type ReasonCodeValue = (typeof REASON_CODE_CATALOG)[number]["value"];
+export const REJECTION_REASON_CODES = [
+  { value: "DEMO_REQUIREMENTS_NOT_MET", label: "No cumple los requisitos de la demo" },
+  { value: "FAILED_ADMIN_VALIDATION", label: "Fallo la validacion administrativa" },
+  { value: "FAILED_POLICE_VALIDATION", label: "Fallo la validacion policial" },
+  { value: "EXPIRED_DEMO_PROCESS", label: "El proceso demo vencio" }
+] as const;
+
+export interface ReasonCodeOption {
+  value: string;
+  label: string;
+}

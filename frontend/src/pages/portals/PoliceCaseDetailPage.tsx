@@ -9,7 +9,7 @@ import { ReasonCodeField } from "../../features/cases/ReasonCodeField";
 import { REJECTION_REASON_CODES, REMEDIATION_REASON_CODES } from "../../features/cases/reasonCodes";
 import { isApiError } from "../../api/errors";
 import {
-  approveForeignAffairs,
+  approvePolice,
   getCase,
   getCaseTimeline,
   rejectCase,
@@ -20,11 +20,11 @@ import {
   CASE_STATUS_TONE,
   describeCaseEvent
 } from "../../features/cases/caseLabels";
-import { canActOnReview, canForeignAffairsApprove } from "../../features/cases/caseTransitions";
+import { canActOnReview, canPoliceApprove } from "../../features/cases/caseTransitions";
 import type { TransactionOutcome } from "../../features/transactions/schemas";
-import styles from "./ForeignAffairsCaseDetailPage.module.css";
+import styles from "./PoliceCaseDetailPage.module.css";
 
-export function ForeignAffairsCaseDetailPage() {
+export function PoliceCaseDetailPage() {
   const { caseId: caseIdParam } = useParams<{ caseId: string }>();
   const caseId = Number(caseIdParam);
   const isValidCaseId = Number.isInteger(caseId) && caseId > 0;
@@ -40,6 +40,14 @@ export function ForeignAffairsCaseDetailPage() {
     queryFn: () => getCaseTimeline(caseId),
     enabled: isValidCaseId
   });
+
+  // Both steps below are demo-only UI gates, not chain state: NationalityCaseRegistry.sol
+  // has no background-check or age-commitment field (AgeProofVerifier is deferred to M9,
+  // see ADR-006/docs/CONTRATOS.md). They exist to reflect the functional precondition
+  // documented in docs/FUNCIONAL.md ("compromiso de edad si aplica") without pretending a
+  // real check happened; resetting the page loses them on purpose.
+  const [backgroundCheckDone, setBackgroundCheckDone] = useState(false);
+  const [ageCommitmentRegistered, setAgeCommitmentRegistered] = useState(false);
 
   const [remediationReason, setRemediationReason] = useState("");
   const [remediationOutcome, setRemediationOutcome] = useState<TransactionOutcome | null>(null);
@@ -83,7 +91,7 @@ export function ForeignAffairsCaseDetailPage() {
     setApproveBusy(true);
     setApproveError(null);
     try {
-      const outcome = await approveForeignAffairs(caseId);
+      const outcome = await approvePolice(caseId);
       setApproveOutcome(outcome);
       if (outcome.status === "CONFIRMED") {
         refreshCase();
@@ -142,7 +150,8 @@ export function ForeignAffairsCaseDetailPage() {
 
   const caseData = caseQuery.data;
   const canAct = canActOnReview(caseData);
-  const canApprove = canForeignAffairsApprove(caseData);
+  const canApproveOnChain = canPoliceApprove(caseData);
+  const canApprove = canApproveOnChain && backgroundCheckDone && ageCommitmentRegistered;
 
   return (
     <div className={styles["page"]}>
@@ -168,11 +177,53 @@ export function ForeignAffairsCaseDetailPage() {
       </Card>
 
       <Card>
+        <h2>Verificaciones previas a la aprobacion</h2>
+        <p className={styles["privacyNote"]}>
+          La fecha de nacimiento nunca se publica on-chain, en eventos, en la API ni en esta
+          interfaz. La prueba criptografica completa de mayoria de edad (ZK o atestacion EIP-712)
+          esta diferida a M9 (ver ADR-006); estos dos pasos son simulados para reflejar la
+          precondicion funcional sin inventar un mecanismo de verificacion real.
+        </p>
+
+        <div className={styles["actionBlock"]}>
+          <h3>Validacion de antecedentes (simulada)</h3>
+          {backgroundCheckDone ? (
+            <Badge tone="success">Sin antecedentes (simulado)</Badge>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setBackgroundCheckDone(true);
+              }}
+            >
+              Ejecutar validacion de antecedentes (simulada)
+            </Button>
+          )}
+        </div>
+
+        <div className={styles["actionBlock"]}>
+          <h3>Compromiso de mayoria de edad</h3>
+          {ageCommitmentRegistered ? (
+            <Badge tone="success">Compromiso registrado (simulado)</Badge>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setAgeCommitmentRegistered(true);
+              }}
+            >
+              Registrar compromiso de edad (simulado)
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      <Card>
         <h2>Acciones</h2>
         {!canAct ? (
           <p className={styles["hint"]}>
             Este expediente no esta en revision ({CASE_STATUS_LABEL[caseData.status]}): las acciones
-            de Extranjeria no aplican en este estado.
+            de Policia no aplican en este estado.
           </p>
         ) : null}
 
@@ -193,9 +244,15 @@ export function ForeignAffairsCaseDetailPage() {
         </div>
 
         <div className={styles["actionBlock"]}>
-          <h3>Aprobacion administrativa</h3>
-          {!canApprove && canAct ? (
-            <p className={styles["hint"]}>Ya aprobado por Extranjeria.</p>
+          <h3>Aprobacion policial</h3>
+          {!canApproveOnChain && canAct ? (
+            <p className={styles["hint"]}>Ya aprobado por Policia.</p>
+          ) : null}
+          {canApproveOnChain && !canApprove ? (
+            <p className={styles["hint"]}>
+              Completa la validacion de antecedentes y el registro del compromiso de edad antes de
+              aprobar.
+            </p>
           ) : null}
           <Button
             disabled={!canApprove || approveBusy}
