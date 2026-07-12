@@ -5,13 +5,13 @@ import { Card } from "../../design-system/components/Card";
 import { Button } from "../../design-system/components/Button";
 import { Badge } from "../../design-system/components/Badge";
 import { TextField } from "../../design-system/components/TextField";
-import { TransactionStatusView } from "../../features/transactions/TransactionStatusView";
+import { TransactionProgress } from "../../features/transactions/TransactionProgress";
+import { useTransactionAction } from "../../features/transactions/useTransactionAction";
 import { EuroBalanceWidget } from "../../features/euro-balance/EuroBalanceWidget";
 import { addKnownCaseId, getKnownCaseIds } from "../../features/cases/knownCases";
 import { useCasesSummary } from "../../features/cases/useCasesSummary";
 import { createCase } from "../../features/cases/api";
 import { CASE_STATUS_LABEL, CASE_STATUS_TONE } from "../../features/cases/caseLabels";
-import type { CreateCaseResponse } from "../../features/cases/schemas";
 import styles from "./CitizenPortalPage.module.css";
 
 export function CitizenPortalPage() {
@@ -20,9 +20,6 @@ export function CitizenPortalPage() {
   const [knownCaseIds, setKnownCaseIds] = useState<number[]>(() =>
     evmAddress ? getKnownCaseIds(evmAddress) : []
   );
-  const [creating, setCreating] = useState(false);
-  const [createOutcome, setCreateOutcome] = useState<CreateCaseResponse | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
   const [manualCaseId, setManualCaseId] = useState("");
 
   const summaries = useCasesSummary(knownCaseIds);
@@ -32,21 +29,15 @@ export function CitizenPortalPage() {
     setKnownCaseIds((current) => (current.includes(caseId) ? current : [...current, caseId]));
   }
 
-  async function handleCreateCase() {
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const outcome = await createCase();
-      setCreateOutcome(outcome);
-      if (outcome.status === "CONFIRMED" && outcome.caseId !== null) {
-        rememberCaseId(outcome.caseId);
+  const createCaseAction = useTransactionAction(
+    `citizen-${evmAddress}-create-case`,
+    (idempotencyKey) => createCase(idempotencyKey),
+    (caseId) => {
+      if (caseId !== null && caseId !== undefined) {
+        rememberCaseId(caseId);
       }
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : "No se pudo crear el expediente");
-    } finally {
-      setCreating(false);
     }
-  }
+  );
 
   function handleAddManualCaseId(event: FormEvent) {
     event.preventDefault();
@@ -115,14 +106,22 @@ export function CitizenPortalPage() {
         <h2>Crear expediente</h2>
         <Button
           onClick={() => {
-            void handleCreateCase();
+            void createCaseAction.execute();
           }}
-          disabled={creating}
+          disabled={createCaseAction.phase !== "idle" && createCaseAction.phase !== "reverted"}
         >
-          {creating ? "Enviando..." : "Crear nuevo expediente"}
+          Crear nuevo expediente
         </Button>
-        {createError ? <p role="alert">{createError}</p> : null}
-        {createOutcome ? <TransactionStatusView outcome={createOutcome} /> : null}
+        <TransactionProgress
+          phase={createCaseAction.phase}
+          transactionHash={createCaseAction.transactionHash}
+          blockNumber={createCaseAction.blockNumber}
+          errorCode={createCaseAction.errorCode}
+          errorMessage={createCaseAction.errorMessage}
+          submitError={createCaseAction.submitError}
+          isTimedOut={createCaseAction.isTimedOut}
+          onRetryReconciliation={createCaseAction.retryReconciliation}
+        />
       </Card>
     </div>
   );

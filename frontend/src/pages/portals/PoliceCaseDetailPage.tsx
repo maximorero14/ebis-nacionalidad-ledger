@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "../../design-system/components/Card";
 import { Badge } from "../../design-system/components/Badge";
 import { Button } from "../../design-system/components/Button";
-import { TransactionStatusView } from "../../features/transactions/TransactionStatusView";
+import { TransactionProgress } from "../../features/transactions/TransactionProgress";
+import { useTransactionAction } from "../../features/transactions/useTransactionAction";
 import { ReasonCodeField } from "../../features/cases/ReasonCodeField";
 import { REJECTION_REASON_CODES, REMEDIATION_REASON_CODES } from "../../features/cases/reasonCodes";
 import { isApiError } from "../../api/errors";
@@ -21,8 +22,9 @@ import {
   describeCaseEvent
 } from "../../features/cases/caseLabels";
 import { canActOnReview, canPoliceApprove } from "../../features/cases/caseTransitions";
-import type { TransactionOutcome } from "../../features/transactions/schemas";
 import styles from "./PoliceCaseDetailPage.module.css";
+
+const IN_FLIGHT_PHASES = new Set(["preparing", "submitting", "pending", "confirmed"]);
 
 export function PoliceCaseDetailPage() {
   const { caseId: caseIdParam } = useParams<{ caseId: string }>();
@@ -50,18 +52,7 @@ export function PoliceCaseDetailPage() {
   const [ageCommitmentRegistered, setAgeCommitmentRegistered] = useState(false);
 
   const [remediationReason, setRemediationReason] = useState("");
-  const [remediationOutcome, setRemediationOutcome] = useState<TransactionOutcome | null>(null);
-  const [remediationError, setRemediationError] = useState<string | null>(null);
-  const [remediationBusy, setRemediationBusy] = useState(false);
-
-  const [approveOutcome, setApproveOutcome] = useState<TransactionOutcome | null>(null);
-  const [approveError, setApproveError] = useState<string | null>(null);
-  const [approveBusy, setApproveBusy] = useState(false);
-
   const [rejectReason, setRejectReason] = useState("");
-  const [rejectOutcome, setRejectOutcome] = useState<TransactionOutcome | null>(null);
-  const [rejectError, setRejectError] = useState<string | null>(null);
-  const [rejectBusy, setRejectBusy] = useState(false);
 
   function refreshCase() {
     void queryClient.invalidateQueries({ queryKey: ["case", caseId] });
@@ -69,55 +60,23 @@ export function PoliceCaseDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ["case-list"] });
   }
 
-  async function handleRequestRemediation() {
-    setRemediationBusy(true);
-    setRemediationError(null);
-    try {
-      const outcome = await requestRemediation(caseId, remediationReason);
-      setRemediationOutcome(outcome);
-      if (outcome.status === "CONFIRMED") {
-        refreshCase();
-      }
-    } catch (error) {
-      setRemediationError(
-        error instanceof Error ? error.message : "No se pudo solicitar la subsanacion"
-      );
-    } finally {
-      setRemediationBusy(false);
-    }
-  }
+  const remediationAction = useTransactionAction(
+    `case-${caseId}-remediation`,
+    (idempotencyKey) => requestRemediation(caseId, remediationReason, idempotencyKey),
+    () => refreshCase()
+  );
 
-  async function handleApprove() {
-    setApproveBusy(true);
-    setApproveError(null);
-    try {
-      const outcome = await approvePolice(caseId);
-      setApproveOutcome(outcome);
-      if (outcome.status === "CONFIRMED") {
-        refreshCase();
-      }
-    } catch (error) {
-      setApproveError(error instanceof Error ? error.message : "No se pudo aprobar el expediente");
-    } finally {
-      setApproveBusy(false);
-    }
-  }
+  const approveAction = useTransactionAction(
+    `case-${caseId}-police-approval`,
+    (idempotencyKey) => approvePolice(caseId, idempotencyKey),
+    () => refreshCase()
+  );
 
-  async function handleReject() {
-    setRejectBusy(true);
-    setRejectError(null);
-    try {
-      const outcome = await rejectCase(caseId, rejectReason);
-      setRejectOutcome(outcome);
-      if (outcome.status === "CONFIRMED") {
-        refreshCase();
-      }
-    } catch (error) {
-      setRejectError(error instanceof Error ? error.message : "No se pudo rechazar el expediente");
-    } finally {
-      setRejectBusy(false);
-    }
-  }
+  const rejectAction = useTransactionAction(
+    `case-${caseId}-reject`,
+    (idempotencyKey) => rejectCase(caseId, rejectReason, idempotencyKey),
+    () => refreshCase()
+  );
 
   if (!isValidCaseId) {
     return (
@@ -232,15 +191,25 @@ export function PoliceCaseDetailPage() {
           <ReasonCodeField codes={REMEDIATION_REASON_CODES} onChange={setRemediationReason} />
           <Button
             variant="secondary"
-            disabled={!canAct || remediationBusy || !remediationReason.trim()}
+            disabled={
+              !canAct || IN_FLIGHT_PHASES.has(remediationAction.phase) || !remediationReason.trim()
+            }
             onClick={() => {
-              void handleRequestRemediation();
+              void remediationAction.execute();
             }}
           >
-            {remediationBusy ? "Enviando..." : "Solicitar subsanacion"}
+            Solicitar subsanacion
           </Button>
-          {remediationError ? <p role="alert">{remediationError}</p> : null}
-          {remediationOutcome ? <TransactionStatusView outcome={remediationOutcome} /> : null}
+          <TransactionProgress
+            phase={remediationAction.phase}
+            transactionHash={remediationAction.transactionHash}
+            blockNumber={remediationAction.blockNumber}
+            errorCode={remediationAction.errorCode}
+            errorMessage={remediationAction.errorMessage}
+            submitError={remediationAction.submitError}
+            isTimedOut={remediationAction.isTimedOut}
+            onRetryReconciliation={remediationAction.retryReconciliation}
+          />
         </div>
 
         <div className={styles["actionBlock"]}>
@@ -255,15 +224,23 @@ export function PoliceCaseDetailPage() {
             </p>
           ) : null}
           <Button
-            disabled={!canApprove || approveBusy}
+            disabled={!canApprove || IN_FLIGHT_PHASES.has(approveAction.phase)}
             onClick={() => {
-              void handleApprove();
+              void approveAction.execute();
             }}
           >
-            {approveBusy ? "Aprobando..." : "Aprobar"}
+            Aprobar
           </Button>
-          {approveError ? <p role="alert">{approveError}</p> : null}
-          {approveOutcome ? <TransactionStatusView outcome={approveOutcome} /> : null}
+          <TransactionProgress
+            phase={approveAction.phase}
+            transactionHash={approveAction.transactionHash}
+            blockNumber={approveAction.blockNumber}
+            errorCode={approveAction.errorCode}
+            errorMessage={approveAction.errorMessage}
+            submitError={approveAction.submitError}
+            isTimedOut={approveAction.isTimedOut}
+            onRetryReconciliation={approveAction.retryReconciliation}
+          />
         </div>
 
         <div className={styles["actionBlock"]}>
@@ -271,15 +248,23 @@ export function PoliceCaseDetailPage() {
           <ReasonCodeField codes={REJECTION_REASON_CODES} onChange={setRejectReason} />
           <Button
             variant="danger"
-            disabled={!canAct || rejectBusy || !rejectReason.trim()}
+            disabled={!canAct || IN_FLIGHT_PHASES.has(rejectAction.phase) || !rejectReason.trim()}
             onClick={() => {
-              void handleReject();
+              void rejectAction.execute();
             }}
           >
-            {rejectBusy ? "Rechazando..." : "Rechazar expediente"}
+            Rechazar expediente
           </Button>
-          {rejectError ? <p role="alert">{rejectError}</p> : null}
-          {rejectOutcome ? <TransactionStatusView outcome={rejectOutcome} /> : null}
+          <TransactionProgress
+            phase={rejectAction.phase}
+            transactionHash={rejectAction.transactionHash}
+            blockNumber={rejectAction.blockNumber}
+            errorCode={rejectAction.errorCode}
+            errorMessage={rejectAction.errorMessage}
+            submitError={rejectAction.submitError}
+            isTimedOut={rejectAction.isTimedOut}
+            onRetryReconciliation={rejectAction.retryReconciliation}
+          />
         </div>
       </Card>
 

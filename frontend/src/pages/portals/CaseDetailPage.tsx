@@ -5,7 +5,8 @@ import { Card } from "../../design-system/components/Card";
 import { Badge } from "../../design-system/components/Badge";
 import { Button } from "../../design-system/components/Button";
 import { TextField } from "../../design-system/components/TextField";
-import { TransactionStatusView } from "../../features/transactions/TransactionStatusView";
+import { TransactionProgress } from "../../features/transactions/TransactionProgress";
+import { useTransactionAction } from "../../features/transactions/useTransactionAction";
 import { EuroBalanceWidget } from "../../features/euro-balance/EuroBalanceWidget";
 import { CredentialCard } from "../../features/credentials/CredentialCard";
 import { isApiError } from "../../api/errors";
@@ -22,9 +23,9 @@ import {
   CASE_STATUS_TONE,
   describeCaseEvent
 } from "../../features/cases/caseLabels";
-import type { SubmitDocumentsResponse } from "../../features/cases/schemas";
-import type { TransactionOutcome } from "../../features/transactions/schemas";
 import styles from "./CaseDetailPage.module.css";
+
+const IN_FLIGHT_PHASES = new Set(["preparing", "submitting", "pending", "confirmed"]);
 
 export function CaseDetailPage() {
   const { caseId: caseIdParam } = useParams<{ caseId: string }>();
@@ -44,72 +45,37 @@ export function CaseDetailPage() {
   });
 
   const [documentReference, setDocumentReference] = useState("");
-  const [documentsOutcome, setDocumentsOutcome] = useState<SubmitDocumentsResponse | null>(null);
-  const [documentsError, setDocumentsError] = useState<string | null>(null);
-  const [documentsBusy, setDocumentsBusy] = useState(false);
-
-  const [faucetOutcome, setFaucetOutcome] = useState<TransactionOutcome | null>(null);
-  const [faucetError, setFaucetError] = useState<string | null>(null);
-  const [faucetBusy, setFaucetBusy] = useState(false);
-
-  const [feeOutcome, setFeeOutcome] = useState<TransactionOutcome | null>(null);
-  const [feeError, setFeeError] = useState<string | null>(null);
-  const [feeBusy, setFeeBusy] = useState(false);
 
   function refreshCase() {
     void queryClient.invalidateQueries({ queryKey: ["case", caseId] });
     void queryClient.invalidateQueries({ queryKey: ["case-timeline", caseId] });
   }
 
-  async function handleSubmitDocuments(event: FormEvent) {
+  const documentsAction = useTransactionAction(
+    `case-${caseId}-documents`,
+    (idempotencyKey) =>
+      caseQuery.data?.status === "REMEDIATION_REQUIRED"
+        ? resubmitDocuments(caseId, documentReference, idempotencyKey)
+        : submitDocuments(caseId, documentReference, idempotencyKey),
+    () => {
+      setDocumentReference("");
+      refreshCase();
+    }
+  );
+
+  const faucetAction = useTransactionAction(`case-${caseId}-faucet`, (idempotencyKey) =>
+    claimFaucet(caseId, idempotencyKey)
+  );
+
+  const feeAction = useTransactionAction(
+    `case-${caseId}-fee`,
+    (idempotencyKey) => payFee(caseId, idempotencyKey),
+    () => refreshCase()
+  );
+
+  function handleSubmitDocuments(event: FormEvent) {
     event.preventDefault();
-    setDocumentsBusy(true);
-    setDocumentsError(null);
-    try {
-      const isRemediation = caseQuery.data?.status === "REMEDIATION_REQUIRED";
-      const outcome = isRemediation
-        ? await resubmitDocuments(caseId, documentReference)
-        : await submitDocuments(caseId, documentReference);
-      setDocumentsOutcome(outcome);
-      if (outcome.status === "CONFIRMED") {
-        setDocumentReference("");
-        refreshCase();
-      }
-    } catch (error) {
-      setDocumentsError(
-        error instanceof Error ? error.message : "No se pudo enviar la referencia documental"
-      );
-    } finally {
-      setDocumentsBusy(false);
-    }
-  }
-
-  async function handleClaimFaucet() {
-    setFaucetBusy(true);
-    setFaucetError(null);
-    try {
-      setFaucetOutcome(await claimFaucet(caseId));
-    } catch (error) {
-      setFaucetError(error instanceof Error ? error.message : "No se pudo reclamar el faucet");
-    } finally {
-      setFaucetBusy(false);
-    }
-  }
-
-  async function handlePayFee() {
-    setFeeBusy(true);
-    setFeeError(null);
-    try {
-      const outcome = await payFee(caseId);
-      setFeeOutcome(outcome);
-      if (outcome.status === "CONFIRMED") {
-        refreshCase();
-      }
-    } catch (error) {
-      setFeeError(error instanceof Error ? error.message : "No se pudo pagar la tasa");
-    } finally {
-      setFeeBusy(false);
-    }
+    void documentsAction.execute();
   }
 
   if (!isValidCaseId) {
@@ -176,12 +142,7 @@ export function CaseDetailPage() {
             hash (compromiso) de esa referencia, nunca su contenido. La referencia nunca debe
             contener datos personales reales.
           </p>
-          <form
-            className={styles["form"]}
-            onSubmit={(event) => {
-              void handleSubmitDocuments(event);
-            }}
-          >
+          <form className={styles["form"]} onSubmit={handleSubmitDocuments}>
             <TextField
               label="Referencia documental (ficticia)"
               value={documentReference}
@@ -189,12 +150,23 @@ export function CaseDetailPage() {
               placeholder="REF-DEMO-0001"
               required
             />
-            <Button type="submit" disabled={documentsBusy || !documentReference.trim()}>
-              {documentsBusy ? "Enviando..." : "Enviar"}
+            <Button
+              type="submit"
+              disabled={IN_FLIGHT_PHASES.has(documentsAction.phase) || !documentReference.trim()}
+            >
+              Enviar
             </Button>
           </form>
-          {documentsError ? <p role="alert">{documentsError}</p> : null}
-          {documentsOutcome ? <TransactionStatusView outcome={documentsOutcome} /> : null}
+          <TransactionProgress
+            phase={documentsAction.phase}
+            transactionHash={documentsAction.transactionHash}
+            blockNumber={documentsAction.blockNumber}
+            errorCode={documentsAction.errorCode}
+            errorMessage={documentsAction.errorMessage}
+            submitError={documentsAction.submitError}
+            isTimedOut={documentsAction.isTimedOut}
+            onRetryReconciliation={documentsAction.retryReconciliation}
+          />
         </Card>
       ) : null}
 
@@ -204,30 +176,46 @@ export function CaseDetailPage() {
           <Button
             variant="secondary"
             onClick={() => {
-              void handleClaimFaucet();
+              void faucetAction.execute();
             }}
-            disabled={faucetBusy}
+            disabled={IN_FLIGHT_PHASES.has(faucetAction.phase)}
           >
-            {faucetBusy ? "Reclamando..." : "Reclamar Euro Digital demo (faucet)"}
+            Reclamar Euro Digital demo (faucet)
           </Button>
           <p className={styles["hint"]}>
             El faucet es unico por direccion, no por expediente: si ya lo reclamaste antes (con
             cualquier expediente), un nuevo intento fallara con "FaucetAlreadyClaimed" — es el
             comportamiento esperado, no un error de la aplicacion.
           </p>
-          {faucetError ? <p role="alert">{faucetError}</p> : null}
-          {faucetOutcome ? <TransactionStatusView outcome={faucetOutcome} /> : null}
+          <TransactionProgress
+            phase={faucetAction.phase}
+            transactionHash={faucetAction.transactionHash}
+            blockNumber={faucetAction.blockNumber}
+            errorCode={faucetAction.errorCode}
+            errorMessage={faucetAction.errorMessage}
+            submitError={faucetAction.submitError}
+            isTimedOut={faucetAction.isTimedOut}
+            onRetryReconciliation={faucetAction.retryReconciliation}
+          />
 
           <Button
             onClick={() => {
-              void handlePayFee();
+              void feeAction.execute();
             }}
-            disabled={feeBusy}
+            disabled={IN_FLIGHT_PHASES.has(feeAction.phase)}
           >
-            {feeBusy ? "Pagando..." : "Pagar tasa"}
+            Pagar tasa
           </Button>
-          {feeError ? <p role="alert">{feeError}</p> : null}
-          {feeOutcome ? <TransactionStatusView outcome={feeOutcome} /> : null}
+          <TransactionProgress
+            phase={feeAction.phase}
+            transactionHash={feeAction.transactionHash}
+            blockNumber={feeAction.blockNumber}
+            errorCode={feeAction.errorCode}
+            errorMessage={feeAction.errorMessage}
+            submitError={feeAction.submitError}
+            isTimedOut={feeAction.isTimedOut}
+            onRetryReconciliation={feeAction.retryReconciliation}
+          />
         </Card>
       ) : null}
 
