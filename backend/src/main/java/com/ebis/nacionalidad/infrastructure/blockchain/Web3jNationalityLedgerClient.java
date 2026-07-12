@@ -4,15 +4,13 @@ import com.ebis.nacionalidad.domain.model.ApplicationRole;
 import com.ebis.nacionalidad.domain.model.CaseEvent;
 import com.ebis.nacionalidad.domain.model.CaseStatus;
 import com.ebis.nacionalidad.domain.model.CredentialView;
+import com.ebis.nacionalidad.domain.model.OnChainRole;
 import com.ebis.nacionalidad.domain.model.OnChainCase;
-import com.ebis.nacionalidad.domain.model.TrackedTransaction;
 import com.ebis.nacionalidad.domain.model.TransactionOutcome;
 import com.ebis.nacionalidad.domain.model.TransactionStatus;
 import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
-import com.ebis.nacionalidad.domain.port.TransactionTrackingPort;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -27,22 +25,19 @@ import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.Utf8String;
 import org.web3j.abi.datatypes.generated.Bytes32;
+import org.web3j.abi.datatypes.generated.Uint16;
 import org.web3j.abi.datatypes.generated.Uint256;
+import org.web3j.abi.datatypes.generated.Uint32;
 import org.web3j.abi.datatypes.generated.Uint64;
 import org.web3j.abi.datatypes.generated.Uint8;
-import org.web3j.crypto.Credentials;
-import org.web3j.crypto.RawTransaction;
-import org.web3j.crypto.TransactionEncoder;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.response.EthCall;
-import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.Log;
 import org.web3j.protocol.core.methods.response.Transaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
-import org.web3j.tx.response.PollingTransactionReceiptProcessor;
 import org.web3j.utils.Numeric;
 
 /**
@@ -57,128 +52,62 @@ import org.web3j.utils.Numeric;
 @Profile("!test")
 public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
 
-    private static final BigInteger GAS_PRICE = BigInteger.ZERO;
-    private static final BigInteger GAS_LIMIT = BigInteger.valueOf(1_000_000);
-    private static final long RECEIPT_POLL_INTERVAL_MS = 500;
-    private static final int RECEIPT_MAX_ATTEMPTS = 60;
-
     private final Web3j web3j;
     private final ContractsManifest manifest;
-    private final DemoActorCredentials actorCredentials;
-    private final NonceManager nonceManager;
-    private final TransactionTrackingPort transactionTracker;
-    private final long chainId;
 
-    public Web3jNationalityLedgerClient(
-            Web3j web3j,
-            ContractsManifest manifest,
-            DemoActorCredentials actorCredentials,
-            NonceManager nonceManager,
-            TransactionTrackingPort transactionTracker) {
+    public Web3jNationalityLedgerClient(Web3j web3j, ContractsManifest manifest) {
         this.web3j = web3j;
         this.manifest = manifest;
-        this.actorCredentials = actorCredentials;
-        this.nonceManager = nonceManager;
-        this.transactionTracker = transactionTracker;
-        this.chainId = manifest.chainId();
     }
 
     @Override
     public TransactionOutcome createCase(ApplicationRole actor) {
-        Function function = new Function("createCase", List.of(), List.of());
-        SendResult result = send(actor, manifest.registryAddress(), function);
-        if (result.receipt() != null && result.tracked().status() == TransactionStatus.CONFIRMED) {
-            Long caseId = decodeCreatedCaseId(result.receipt());
-            TrackedTransaction withCaseId =
-                    result.tracked().confirmed(result.tracked().blockNumber(), caseId, Instant.now());
-            transactionTracker.save(withCaseId);
-            return TransactionOutcome.from(withCaseId);
-        }
-        return toOutcome(result);
+        throw walletSignedTransactionRequired("createCase");
     }
 
     @Override
     public TransactionOutcome submitDocuments(ApplicationRole actor, long caseId, byte[] documentCommitment) {
-        Function function =
-                new Function(
-                        "submitDocuments",
-                        List.of(new Uint256(caseId), new Bytes32(documentCommitment)),
-                        List.of());
-        return toOutcome(send(actor, manifest.registryAddress(), function));
+        throw walletSignedTransactionRequired("submitDocuments");
     }
 
     @Override
     public TransactionOutcome claimFaucet(ApplicationRole actor) {
-        Function function = new Function("claimFaucet", List.of(), List.of());
-        return toOutcome(send(actor, manifest.tokenAddress(), function));
+        throw walletSignedTransactionRequired("claimFaucet");
     }
 
     @Override
     public TransactionOutcome payFee(ApplicationRole actor, long caseId) {
-        BigInteger feeAmount = readFeeAmount();
-        Function approve =
-                new Function(
-                        "approve",
-                        List.of(new Address(manifest.registryAddress()), new Uint256(feeAmount)),
-                        List.of());
-        SendResult approveResult = send(actor, manifest.tokenAddress(), approve);
-        if (approveResult.tracked().status() != TransactionStatus.CONFIRMED) {
-            // Do not attempt payFee if approve did not confirm: transferFrom would only
-            // fail on a stale allowance, wasting a nonce on a predictably-reverting call.
-            return toOutcome(approveResult);
-        }
-
-        Function payFee = new Function("payFee", List.of(new Uint256(caseId)), List.of());
-        return toOutcome(send(actor, manifest.registryAddress(), payFee));
+        throw walletSignedTransactionRequired("payFee");
     }
 
     @Override
     public TransactionOutcome requestRemediation(ApplicationRole actor, long caseId, byte[] reasonCode) {
-        Function function =
-                new Function(
-                        "requestRemediation",
-                        List.of(new Uint256(caseId), new Bytes32(reasonCode)),
-                        List.of());
-        return toOutcome(send(actor, manifest.registryAddress(), function));
+        throw walletSignedTransactionRequired("requestRemediation");
     }
 
     @Override
     public TransactionOutcome approveForeignAffairs(ApplicationRole actor, long caseId, long round) {
-        Function function =
-                new Function(
-                        "approveForeignAffairs",
-                        List.of(new Uint256(caseId), new Uint64(round)),
-                        List.of());
-        return toOutcome(send(actor, manifest.registryAddress(), function));
+        throw walletSignedTransactionRequired("approveForeignAffairs");
     }
 
     @Override
     public TransactionOutcome approvePolice(ApplicationRole actor, long caseId, long round) {
-        Function function =
-                new Function(
-                        "approvePolice", List.of(new Uint256(caseId), new Uint64(round)), List.of());
-        return toOutcome(send(actor, manifest.registryAddress(), function));
+        throw walletSignedTransactionRequired("approvePolice");
     }
 
     @Override
     public TransactionOutcome rejectCase(ApplicationRole actor, long caseId, byte[] reasonCode) {
-        Function function =
-                new Function(
-                        "rejectCase", List.of(new Uint256(caseId), new Bytes32(reasonCode)), List.of());
-        return toOutcome(send(actor, manifest.registryAddress(), function));
+        throw walletSignedTransactionRequired("rejectCase");
     }
 
     @Override
     public TransactionOutcome issueCredential(ApplicationRole actor, long caseId) {
-        Function function = new Function("issueCredential", List.of(new Uint256(caseId)), List.of());
-        return toOutcome(send(actor, manifest.registryAddress(), function));
+        throw walletSignedTransactionRequired("issueCredential");
     }
 
     @Override
     public TransactionOutcome revokeCredential(ApplicationRole actor, long caseId, byte[] reasonCode) {
-        Function function =
-                new Function("revoke", List.of(new Uint256(caseId), new Bytes32(reasonCode)), List.of());
-        return toOutcome(send(actor, manifest.credentialAddress(), function));
+        throw walletSignedTransactionRequired("revokeCredential");
     }
 
     @Override
@@ -227,7 +156,12 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
                         List.of(
                                 new TypeReference<Uint256>() {},
                                 new TypeReference<Address>() {},
+                                new TypeReference<Uint64>() {},
+                                new TypeReference<Uint64>() {},
+                                new TypeReference<Uint32>() {},
+                                new TypeReference<Uint16>() {},
                                 new TypeReference<Bool>() {},
+                                new TypeReference<Bytes32>() {},
                                 new TypeReference<Bytes32>() {}));
         List<Type> result;
         try {
@@ -244,14 +178,30 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
                 new Function(
                         "tokenURI", List.of(new Uint256(caseId)), List.of(new TypeReference<Utf8String>() {}));
         String tokenUri = ((Utf8String) call(manifest.credentialAddress(), tokenUriFunction).get(0)).getValue();
+        Function statusFunction =
+                new Function(
+                        "statusOf", List.of(new Uint256(caseId)), List.of(new TypeReference<Uint8>() {}));
+        String status =
+                switch (((Uint8) call(manifest.credentialAddress(), statusFunction).get(0)).getValue().intValue()) {
+                    case 1 -> "ACTIVE";
+                    case 2 -> "EXPIRED";
+                    case 3 -> "REVOKED";
+                    default -> "NONE";
+                };
 
         return Optional.of(
                 new CredentialView(
                         caseId,
                         ((Uint256) result.get(0)).getValue().longValue(),
                         holder,
-                        ((Bool) result.get(2)).getValue(),
-                        Numeric.toHexString(((Bytes32) result.get(3)).getValue()),
+                        status,
+                        ((Uint64) result.get(2)).getValue().longValue(),
+                        ((Uint64) result.get(3)).getValue().longValue(),
+                        ((Uint32) result.get(4)).getValue().longValue(),
+                        ((Uint16) result.get(5)).getValue().intValue(),
+                        Numeric.toHexString(((Bytes32) result.get(8)).getValue()),
+                        ((Bool) result.get(6)).getValue(),
+                        Numeric.toHexString(((Bytes32) result.get(7)).getValue()),
                         tokenUri));
     }
 
@@ -261,6 +211,26 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
                 new Function(
                         "isValid", List.of(new Uint256(caseId)), List.of(new TypeReference<Bool>() {}));
         return ((Bool) call(manifest.credentialAddress(), function).get(0)).getValue();
+    }
+
+    @Override
+    public boolean hasRole(OnChainRole role, String address) {
+        byte[] roleId =
+                ((Bytes32)
+                                call(
+                                                contractAddress(role),
+                                                new Function(
+                                                        role.roleFunction(),
+                                                        List.of(),
+                                                        List.of(new TypeReference<Bytes32>() {})))
+                                        .get(0))
+                        .getValue();
+        Function function =
+                new Function(
+                        "hasRole",
+                        List.of(new Bytes32(roleId), new Address(address)),
+                        List.of(new TypeReference<Bool>() {}));
+        return ((Bool) call(contractAddress(role), function).get(0)).getValue();
     }
 
     @Override
@@ -314,9 +284,17 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
         }
     }
 
-    private BigInteger readFeeAmount() {
-        Function function = new Function("feeAmount", List.of(), List.of(new TypeReference<Uint256>() {}));
-        return ((Uint256) call(manifest.registryAddress(), function).get(0)).getValue();
+    private String contractAddress(OnChainRole role) {
+        return switch (role.contract()) {
+            case REGISTRY -> manifest.registryAddress();
+            case CREDENTIAL -> manifest.credentialAddress();
+            case TOKEN -> manifest.tokenAddress();
+        };
+    }
+
+    private UnsupportedOperationException walletSignedTransactionRequired(String operation) {
+        return new UnsupportedOperationException(
+                operation + " must be signed by the browser wallet and sent directly to Besu");
     }
 
     private List<Type> call(String contractAddress, Function function) {
@@ -336,71 +314,6 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
         } catch (IOException e) {
             throw new BlockchainUnavailableException("Unable to call " + function.getName(), e);
         }
-    }
-
-    /** Carries the raw receipt (null on TIMEOUT, since none arrived) alongside the persisted record. */
-    private record SendResult(TransactionReceipt receipt, TrackedTransaction tracked) {}
-
-    private SendResult send(ApplicationRole actor, String contractAddress, Function function) {
-        Credentials credentials = actorCredentials.forRole(actor);
-        String address = credentials.getAddress();
-        String encodedFunction = FunctionEncoder.encode(function);
-        BigInteger nonce;
-        try {
-            nonce = nonceManager.nextNonce(address);
-        } catch (IOException e) {
-            throw new BlockchainUnavailableException("Unable to resolve nonce for " + address, e);
-        }
-
-        String transactionHash;
-        try {
-            RawTransaction rawTransaction =
-                    RawTransaction.createTransaction(
-                            nonce, GAS_PRICE, GAS_LIMIT, contractAddress, BigInteger.ZERO, encodedFunction);
-            byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, chainId, credentials);
-            EthSendTransaction response =
-                    web3j.ethSendRawTransaction(Numeric.toHexString(signedMessage)).send();
-            if (response.hasError()) {
-                nonceManager.release(address, nonce);
-                throw new ContractCallRevertedException(response.getError().getMessage());
-            }
-            transactionHash = response.getTransactionHash();
-        } catch (IOException e) {
-            throw new BlockchainUnavailableException("Unable to send " + function.getName(), e);
-        }
-
-        Instant submittedAt = Instant.now();
-        transactionTracker.save(TrackedTransaction.pending(transactionHash, submittedAt));
-
-        TransactionReceipt receipt;
-        try {
-            PollingTransactionReceiptProcessor receiptProcessor =
-                    new PollingTransactionReceiptProcessor(
-                            web3j, RECEIPT_POLL_INTERVAL_MS, RECEIPT_MAX_ATTEMPTS);
-            receipt = receiptProcessor.waitForTransactionReceipt(transactionHash);
-        } catch (org.web3j.protocol.exceptions.TransactionException e) {
-            // Not a failure: the receipt simply did not arrive within the polling window.
-            // Never resubmit here — GET /transactions/{hash} reconciles this later by
-            // re-checking the receipt, the only safe way to resolve a TIMEOUT.
-            TrackedTransaction timedOut =
-                    TrackedTransaction.pending(transactionHash, submittedAt).timedOut(Instant.now());
-            transactionTracker.save(timedOut);
-            return new SendResult(null, timedOut);
-        } catch (IOException e) {
-            throw new BlockchainUnavailableException("Unable to poll receipt for " + transactionHash, e);
-        }
-
-        TrackedTransaction pending = TrackedTransaction.pending(transactionHash, submittedAt);
-        TrackedTransaction concluded;
-        if (receipt.isStatusOK()) {
-            concluded = pending.confirmed(receipt.getBlockNumber(), null, Instant.now());
-        } else {
-            CustomErrorDecoder.DecodedError decoded =
-                    decodeRevertReason(address, contractAddress, encodedFunction, receipt.getBlockNumber());
-            concluded = pending.reverted(receipt.getBlockNumber(), decoded.code(), decoded.message(), Instant.now());
-        }
-        transactionTracker.save(concluded);
-        return new SendResult(receipt, concluded);
     }
 
     private CustomErrorDecoder.DecodedError decodeRevertReason(
@@ -461,10 +374,6 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
         } catch (IOException e) {
             throw new BlockchainUnavailableException("Unable to check receipt for " + transactionHash, e);
         }
-    }
-
-    private TransactionOutcome toOutcome(SendResult result) {
-        return TransactionOutcome.from(result.tracked());
     }
 
     private Long decodeCreatedCaseId(TransactionReceipt receipt) {

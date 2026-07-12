@@ -14,13 +14,26 @@ import { listCases } from "../../features/cases/api";
 const SESSION: AuthContextValue = {
   session: {
     accessToken: "token",
-    role: "POLICE",
-    evmAddress: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+    address: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+    chainId: 20260711,
+    capabilities: {
+      isRegistryAdmin: false,
+      isTokenAdmin: false,
+      isCredentialAdmin: false,
+      canReviewForeignAffairs: false,
+      canReviewPolice: true,
+      canIssueCredential: false,
+      canRevokeCredential: false,
+      canMintDemoEuro: false,
+      canManageFaucet: false,
+      canCollectFees: false
+    },
     expiresAt: new Date(Date.now() + 60_000).toISOString()
   },
   isAuthenticated: true,
-  login: vi.fn(),
-  logout: vi.fn()
+  loginWithWallet: vi.fn(),
+  logout: vi.fn(),
+  isSigningIn: false
 };
 
 function renderPage() {

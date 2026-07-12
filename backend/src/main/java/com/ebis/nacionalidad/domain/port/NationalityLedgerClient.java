@@ -3,6 +3,7 @@ package com.ebis.nacionalidad.domain.port;
 import com.ebis.nacionalidad.domain.model.ApplicationRole;
 import com.ebis.nacionalidad.domain.model.CaseEvent;
 import com.ebis.nacionalidad.domain.model.CredentialView;
+import com.ebis.nacionalidad.domain.model.OnChainRole;
 import com.ebis.nacionalidad.domain.model.OnChainCase;
 import com.ebis.nacionalidad.domain.model.TransactionOutcome;
 import java.math.BigInteger;
@@ -43,6 +44,8 @@ public interface NationalityLedgerClient {
     Optional<CredentialView> readCredential(long caseId);
 
     boolean isCredentialValid(long caseId);
+
+    boolean hasRole(OnChainRole role, String address);
 
     List<CaseEvent> readTimeline(long caseId);
 

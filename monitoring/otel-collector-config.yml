@@ -1,0 +1,86 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: besu-via-otel
+          scrape_interval: 15s
+          static_configs:
+            - targets:
+                - validator1:9545
+              labels:
+                node: validator1
+                role: validator
+            - targets:
+                - validator2:9545
+              labels:
+                node: validator2
+                role: validator
+            - targets:
+                - validator3:9545
+              labels:
+                node: validator3
+                role: validator
+            - targets:
+                - validator4:9545
+              labels:
+                node: validator4
+                role: validator
+            - targets:
+                - rpcnode:9545
+              labels:
+                node: rpcnode
+                role: rpc
+
+        - job_name: api-via-otel
+          scrape_interval: 15s
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets:
+                - api:8080
+              labels:
+                service: spring-api
+
+processors:
+  batch:
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: 0.0.0.0:9464
+
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions:
+    - health_check
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - batch
+      exporters:
+        - otlp/tempo
+    metrics:
+      receivers:
+        - prometheus
+      processors:
+        - batch
+      exporters:
+        - prometheus

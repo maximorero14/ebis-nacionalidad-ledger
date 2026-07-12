@@ -1,6 +1,7 @@
 package com.ebis.nacionalidad.infrastructure.web;
 
 import com.ebis.nacionalidad.application.CaseEventProjectionService;
+import com.ebis.nacionalidad.application.OnChainAuthorizationService;
 import com.ebis.nacionalidad.application.WrongRoleException;
 import com.ebis.nacionalidad.domain.model.ApplicationRole;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,16 +26,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectionController {
 
     private final CaseEventProjectionService projectionService;
+    private final OnChainAuthorizationService authorizationService;
 
-    public ProjectionController(CaseEventProjectionService projectionService) {
+    public ProjectionController(
+            CaseEventProjectionService projectionService, OnChainAuthorizationService authorizationService) {
         this.projectionService = projectionService;
+        this.authorizationService = authorizationService;
     }
 
     @PostMapping("/projection/resync")
     @Operation(summary = "Reprocesa la proyeccion (desde el cursor, o desde cero con fromScratch=true)")
     public ResyncResponse resync(
             @RequestParam(defaultValue = "false") boolean fromScratch, @AuthenticationPrincipal Jwt jwt) {
-        requireInstitutionalRole(AuthenticatedActor.from(jwt).role());
+        requireInstitutionalWallet(AuthenticatedWallet.from(jwt).address());
         if (fromScratch) {
             projectionService.reprocessFromScratch();
         } else {
@@ -46,12 +50,12 @@ public class ProjectionController {
     @GetMapping("/projection/divergences")
     @Operation(summary = "Expedientes cuyo estado proyectado ya no coincide con la cadena")
     public List<DivergenceResponse> divergences(@AuthenticationPrincipal Jwt jwt) {
-        requireInstitutionalRole(AuthenticatedActor.from(jwt).role());
+        requireInstitutionalWallet(AuthenticatedWallet.from(jwt).address());
         return projectionService.detectDivergences().stream().map(DivergenceResponse::from).toList();
     }
 
-    private void requireInstitutionalRole(ApplicationRole role) {
-        if (role == ApplicationRole.CITIZEN) {
+    private void requireInstitutionalWallet(String address) {
+        if (!authorizationService.capabilitiesFor(address).canSeeInstitutionalCases()) {
             throw new WrongRoleException(
                     ApplicationRole.FOREIGN_AFFAIRS, ApplicationRole.POLICE, ApplicationRole.CREDENTIAL_ISSUER);
         }

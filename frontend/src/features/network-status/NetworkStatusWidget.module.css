@@ -5,6 +5,13 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   margin-top: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  width: max-content;
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-glass);
+  box-shadow: var(--shadow-sm);
 }
 
 .dot {
@@ -13,8 +20,23 @@
   border-radius: 50%;
   background: var(--color-success);
   flex-shrink: 0;
+  box-shadow: 0 0 0 4px var(--color-success-bg);
+  animation: pulse 1.8s ease-in-out infinite;
 }
 
 .dotDown {
   background: var(--color-danger);
+  box-shadow: 0 0 0 4px var(--color-danger-bg);
+  animation: none;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.28);
+  }
 }

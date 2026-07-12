@@ -9,8 +9,7 @@ describe("reason code catalogs", () => {
     expect(REMEDIATION_REASON_CODES.map((code) => code.value)).toEqual([
       "MISSING_DEMO_DOCUMENT",
       "INVALID_DEMO_FORMAT",
-      "INCONSISTENT_DEMO_REFERENCE",
-      "AGE_COMMITMENT_REQUIRED"
+      "INCONSISTENT_DEMO_REFERENCE"
     ]);
   });
 

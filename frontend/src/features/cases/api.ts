@@ -68,6 +68,10 @@ export function listCases(status?: CaseStatus): Promise<CaseSummary[]> {
   return apiClient.get(`/cases${query}`, caseSummaryListSchema);
 }
 
+export function listMyCases(): Promise<CaseSummary[]> {
+  return apiClient.get("/cases/mine", caseSummaryListSchema);
+}
+
 export function requestRemediation(
   caseId: number,
   reasonCode: string,

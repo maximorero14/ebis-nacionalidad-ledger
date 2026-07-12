@@ -1,6 +1,8 @@
 package com.ebis.nacionalidad.infrastructure.web;
 
 import static org.hamcrest.Matchers.is;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -10,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ebis.nacionalidad.domain.model.ApplicationRole;
 import com.ebis.nacionalidad.domain.model.CaseStatus;
+import com.ebis.nacionalidad.domain.model.OnChainRole;
 import com.ebis.nacionalidad.domain.model.OnChainCase;
 import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
 import com.ebis.nacionalidad.infrastructure.blockchain.ContractsManifest;
@@ -63,6 +66,8 @@ class SecurityIntegrationTest {
         when(nationalityLedgerClient.readCase(999_999L)).thenReturn(Optional.empty());
         when(contractsManifest.chainId()).thenReturn(20260711L);
         when(contractsManifest.tokenAddress()).thenReturn("0xTOKEN");
+        when(nationalityLedgerClient.hasRole(any(), eq("0xPOLICE"))).thenReturn(false);
+        when(nationalityLedgerClient.hasRole(OnChainRole.POLICE, "0xPOLICE")).thenReturn(true);
     }
 
     private OnChainCase onChainCase(long caseId, String owner) {
@@ -71,29 +76,25 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    void loginWithDemoCredentialsReturnsAWorkingToken() throws Exception {
+    void walletNonceIsPublic() throws Exception {
         mockMvc
                 .perform(
-                        post("/auth/login")
+                        post("/auth/nonce")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(loginJson("citizen1", "citizen-demo-pass")))
+                                .content("{\"address\":\"%s\",\"chainId\":20260711}".formatted(CITIZEN_ADDRESS)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role", is("CITIZEN")))
-                .andExpect(jsonPath("$.evmAddress", is(CITIZEN_ADDRESS)));
+                .andExpect(jsonPath("$.address", is(CITIZEN_ADDRESS.toLowerCase())))
+                .andExpect(jsonPath("$.chainId", is(20260711)));
     }
 
     @Test
-    void loginWithWrongPasswordIsRejected() throws Exception {
+    void walletNonceRejectsUnsupportedChain() throws Exception {
         mockMvc
                 .perform(
-                        post("/auth/login")
+                        post("/auth/nonce")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(loginJson("citizen1", "not-the-password")))
+                                .content("{\"address\":\"%s\",\"chainId\":1}".formatted(CITIZEN_ADDRESS)))
                 .andExpect(status().isUnauthorized());
-    }
-
-    private String loginJson(String username, String password) {
-        return "{\"username\":\"%s\",\"password\":\"%s\"}".formatted(username, password);
     }
 
     @Test
@@ -111,9 +112,6 @@ class SecurityIntegrationTest {
 
     @Test
     void citizenTokenIsRejectedForSomeoneElsesCase() throws Exception {
-        // Same request demonstrates both "expediente ajeno" (not the owner) and "token de
-        // rol erroneo" (CITIZEN is not one of the institutional roles allowed to bypass
-        // ownership) — both conditions are the same underlying check in CaseQueryService.
         mockMvc
                 .perform(get("/cases/{caseId}", OTHERS_CASE_ID).with(citizenJwt()))
                 .andExpect(status().isForbidden());
@@ -121,8 +119,6 @@ class SecurityIntegrationTest {
 
     @Test
     void institutionalRoleCanViewAnyCase() throws Exception {
-        // Positive counterpart: a role-based grant (not ownership) succeeds where the
-        // citizen token above was rejected, proving the role check itself works.
         mockMvc
                 .perform(get("/cases/{caseId}", OTHERS_CASE_ID).with(policeJwt()))
                 .andExpect(status().isOk())
@@ -148,9 +144,9 @@ class SecurityIntegrationTest {
                 .jwt(
                         builder ->
                                 builder
-                                        .claim("role", ApplicationRole.CITIZEN.name())
-                                        .claim("evmAddress", CITIZEN_ADDRESS))
-                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_CITIZEN"));
+                                        .subject(CITIZEN_ADDRESS.toLowerCase())
+                                        .claim("evmAddress", CITIZEN_ADDRESS)
+                                        .claim("chainId", 20260711L));
     }
 
     private org.springframework.test.web.servlet.request.RequestPostProcessor policeJwt() {
@@ -158,8 +154,8 @@ class SecurityIntegrationTest {
                 .jwt(
                         builder ->
                                 builder
-                                        .claim("role", ApplicationRole.POLICE.name())
-                                        .claim("evmAddress", "0xPOLICE"))
-                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_POLICE"));
+                                        .subject("0xpolice")
+                                        .claim("evmAddress", "0xPOLICE")
+                                        .claim("chainId", 20260711L));
     }
 }

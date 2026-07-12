@@ -15,8 +15,13 @@ const FILTERS: Array<{ value: CaseStatus | ""; label: string }> = [
   { value: "REJECTED", label: "Rechazados" }
 ];
 
-export function CaseInbox({ detailBasePath }: { detailBasePath: string }) {
-  const [filter, setFilter] = useState<CaseStatus | "">("IN_REVIEW");
+interface CaseInboxProps {
+  detailBasePath: string;
+  initialFilter?: CaseStatus | "";
+}
+
+export function CaseInbox({ detailBasePath, initialFilter = "IN_REVIEW" }: CaseInboxProps) {
+  const [filter, setFilter] = useState<CaseStatus | "">(initialFilter);
   const { data, isPending, isError } = useCaseList(filter || undefined);
 
   return (

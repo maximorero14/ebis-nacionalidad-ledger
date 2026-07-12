@@ -36,8 +36,8 @@ public class CaseQueryController {
                     "Un ciudadano solo puede ver su propio expediente; extranjeria, policia y el "
                             + "emisor pueden ver cualquiera.")
     public CaseResponse getCase(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
-        AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return CaseResponse.from(caseQueryService.getCase(caseId, actor.role(), actor.evmAddress()));
+        AuthenticatedWallet wallet = AuthenticatedWallet.from(jwt);
+        return CaseResponse.from(caseQueryService.getCase(caseId, wallet.address()));
     }
 
     @GetMapping("/cases/{caseId}/timeline")
@@ -45,8 +45,8 @@ public class CaseQueryController {
             summary = "Historial de eventos del expediente",
             description = "Reconstruido leyendo los eventos on-chain directamente (ver M6.5).")
     public List<CaseEvent> getTimeline(@PathVariable long caseId, @AuthenticationPrincipal Jwt jwt) {
-        AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return caseQueryService.getTimeline(caseId, actor.role(), actor.evmAddress());
+        AuthenticatedWallet wallet = AuthenticatedWallet.from(jwt);
+        return caseQueryService.getTimeline(caseId, wallet.address());
     }
 
     @GetMapping("/cases")
@@ -58,10 +58,17 @@ public class CaseQueryController {
                             + "opcional por status.")
     public List<CaseSummaryResponse> listCases(
             @RequestParam(required = false) CaseStatus status, @AuthenticationPrincipal Jwt jwt) {
-        AuthenticatedActor actor = AuthenticatedActor.from(jwt);
-        return caseQueryService.listCases(actor.role(), status).stream()
+        AuthenticatedWallet wallet = AuthenticatedWallet.from(jwt);
+        return caseQueryService.listCases(wallet.address(), status).stream()
                 .map(CaseSummaryResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/cases/mine")
+    @Operation(summary = "Expedientes propios de la wallet autenticada")
+    public List<CaseSummaryResponse> listMine(@AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedWallet wallet = AuthenticatedWallet.from(jwt);
+        return caseQueryService.listMine(wallet.address()).stream().map(CaseSummaryResponse::from).toList();
     }
 
     @ExceptionHandler(WrongRoleException.class)

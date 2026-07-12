@@ -61,7 +61,7 @@ async function main() {
   }
 
   const admin = manifest.actors.admin;
-  const { treasury, foreignAffairs, police, issuer } = manifest.actors;
+  const { treasury, foreignAffairs, police, issuer, revoker, tokenOperator } = manifest.actors;
 
   assertCondition(
     (await registry.read.treasury()).toLowerCase() === treasury.toLowerCase(),
@@ -120,8 +120,12 @@ async function main() {
     "registry contract holds CREDENTIAL_ISSUER_ROLE on the credential contract"
   );
   assertCondition(
-    await credential.read.hasRole([revokerRole, issuer]),
-    "issuer actor holds REVOKER_ROLE on the credential contract"
+    !(await credential.read.hasRole([revokerRole, issuer])),
+    "issuer actor does not hold REVOKER_ROLE"
+  );
+  assertCondition(
+    await credential.read.hasRole([revokerRole, revoker]),
+    "revoker actor holds REVOKER_ROLE on the credential contract"
   );
   assertCondition(
     !(await credential.read.hasRole([credentialIssuerRole, admin])),
@@ -140,15 +144,21 @@ async function main() {
   const faucetRole = await token.read.FAUCET_ROLE();
   const feeCollectorRole = await token.read.FEE_COLLECTOR_ROLE();
   const tokenDefaultAdminRole = await token.read.DEFAULT_ADMIN_ROLE();
-  assertCondition(await token.read.hasRole([minterRole, issuer]), "issuer actor holds MINTER_ROLE");
-  assertCondition(await token.read.hasRole([faucetRole, issuer]), "issuer actor holds FAUCET_ROLE");
   assertCondition(
-    await token.read.hasRole([feeCollectorRole, issuer]),
-    "issuer actor holds FEE_COLLECTOR_ROLE"
+    !(await token.read.hasRole([minterRole, tokenOperator])),
+    "token operator actor does not hold MINTER_ROLE"
   );
   assertCondition(
-    !(await token.read.hasRole([minterRole, admin])),
-    "admin no longer holds MINTER_ROLE"
+    !(await token.read.hasRole([faucetRole, tokenOperator])),
+    "token operator actor does not hold FAUCET_ROLE"
+  );
+  assertCondition(
+    await token.read.hasRole([feeCollectorRole, tokenOperator]),
+    "token operator actor holds FEE_COLLECTOR_ROLE"
+  );
+  assertCondition(
+    await token.read.hasRole([tokenDefaultAdminRole, admin]),
+    "admin holds DEFAULT_ADMIN_ROLE and is the only account allowed to mint"
   );
   assertCondition(
     !(await token.read.hasRole([faucetRole, admin])),
@@ -158,11 +168,6 @@ async function main() {
     !(await token.read.hasRole([feeCollectorRole, admin])),
     "admin no longer holds FEE_COLLECTOR_ROLE"
   );
-  assertCondition(
-    await token.read.hasRole([tokenDefaultAdminRole, admin]),
-    "admin still holds DEFAULT_ADMIN_ROLE on the token contract"
-  );
-
   const blockNumber = await publicClient.getBlockNumber();
   console.log(`Deployment verified against ${NETWORK_NAME} at block ${blockNumber}.`);
 }

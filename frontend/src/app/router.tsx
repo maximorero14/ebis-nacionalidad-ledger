@@ -1,7 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "./AppShell";
-import { ProtectedRoute } from "../auth/ProtectedRoute";
-import { LoginPage } from "../pages/LoginPage";
+import { WalletRoute } from "../wallet/WalletRoute";
+import { WalletPage } from "../pages/WalletPage";
 import { HomeRedirect } from "../pages/HomeRedirect";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
@@ -13,6 +13,8 @@ import { PolicePortalPage } from "../pages/portals/PolicePortalPage";
 import { PoliceCaseDetailPage } from "../pages/portals/PoliceCaseDetailPage";
 import { VerifierPortalPage } from "../pages/portals/VerifierPortalPage";
 import { CredentialIssuerPortalPage } from "../pages/portals/CredentialIssuerPortalPage";
+import { CredentialIssuerCaseDetailPage } from "../pages/portals/CredentialIssuerCaseDetailPage";
+import { AdminTokenPage } from "../pages/portals/AdminTokenPage";
 
 export const router = createBrowserRouter([
   {
@@ -20,33 +22,40 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <HomeRedirect /> },
-      { path: "login", element: <LoginPage /> },
+      { path: "wallet", element: <WalletPage /> },
       { path: "verificador", element: <VerifierPortalPage /> },
       { path: "prohibido", element: <ForbiddenPage /> },
       {
-        element: <ProtectedRoute allowedRoles={["CITIZEN"]} />,
+        element: <WalletRoute />,
         children: [
           { path: "ciudadano", element: <CitizenPortalPage /> },
           { path: "ciudadano/expedientes/:caseId", element: <CaseDetailPage /> }
         ]
       },
       {
-        element: <ProtectedRoute allowedRoles={["FOREIGN_AFFAIRS"]} />,
+        element: <WalletRoute requires={["canReviewForeignAffairs"]} />,
         children: [
           { path: "extranjeria", element: <ForeignAffairsPortalPage /> },
           { path: "extranjeria/expedientes/:caseId", element: <ForeignAffairsCaseDetailPage /> }
         ]
       },
       {
-        element: <ProtectedRoute allowedRoles={["POLICE"]} />,
+        element: <WalletRoute requires={["canReviewPolice"]} />,
         children: [
           { path: "policia", element: <PolicePortalPage /> },
           { path: "policia/expedientes/:caseId", element: <PoliceCaseDetailPage /> }
         ]
       },
       {
-        element: <ProtectedRoute allowedRoles={["CREDENTIAL_ISSUER"]} />,
-        children: [{ path: "emisor", element: <CredentialIssuerPortalPage /> }]
+        element: <WalletRoute requires={["isTokenAdmin"]} />,
+        children: [{ path: "admin", element: <AdminTokenPage /> }]
+      },
+      {
+        element: <WalletRoute requires={["canIssueCredential"]} />,
+        children: [
+          { path: "emisor", element: <CredentialIssuerPortalPage /> },
+          { path: "emisor/expedientes/:caseId", element: <CredentialIssuerCaseDetailPage /> }
+        ]
       },
       { path: "*", element: <NotFoundPage /> }
     ]

@@ -22,16 +22,57 @@ fi
 
 mkdir -p "${GENERATED_DIR}"
 
-docker run --rm \
-  -u "$(id -u):$(id -g)" \
-  -v "${BESU_DIR}:/work" \
-  "hyperledger/besu:${BESU_VERSION}" \
-  operator generate-blockchain-config \
-  --config-file=/work/qbftConfigFile.json \
-  --to=/work/generated/networkFiles \
-  --private-key-file-name=key
+run_besu() {
+  if command -v besu >/dev/null 2>&1; then
+    besu "$@"
+  else
+    docker run --rm \
+      -u "$(id -u):$(id -g)" \
+      -v "${BESU_DIR}:/work" \
+      "hyperledger/besu:${BESU_VERSION}" \
+      "$@"
+  fi
+}
+
+if command -v besu >/dev/null 2>&1; then
+  run_besu \
+    operator generate-blockchain-config \
+    --config-file="${BESU_DIR}/qbftConfigFile.json" \
+    --to="${NETWORK_FILES_DIR}" \
+    --private-key-file-name=key
+else
+  run_besu \
+    operator generate-blockchain-config \
+    --config-file=/work/qbftConfigFile.json \
+    --to=/work/generated/networkFiles \
+    --private-key-file-name=key
+fi
 
 cp "${NETWORK_FILES_DIR}/genesis.json" "${GENERATED_DIR}/genesis.json"
+
+if command -v node >/dev/null 2>&1; then
+  demo_addresses="$(node "${ROOT_DIR}/scripts/demo-wallets.js" addresses)"
+  DEMO_PREFUND_ADDRESSES="${demo_addresses}" GENESIS_PATH="${GENERATED_DIR}/genesis.json" node --input-type=module <<'NODE'
+import { readFile, writeFile } from "node:fs/promises";
+
+const genesisPath = process.env.GENESIS_PATH;
+const addresses = (process.env.DEMO_PREFUND_ADDRESSES ?? "")
+  .split(",")
+  .map((address) => address.trim())
+  .filter(Boolean);
+const prefundBalance = process.env.DEMO_PREFUND_BALANCE ?? "0x3635C9ADC5DEA00000";
+
+const genesis = JSON.parse(await readFile(genesisPath, "utf8"));
+genesis.alloc = genesis.alloc ?? {};
+for (const address of addresses) {
+  genesis.alloc[address] = { balance: prefundBalance };
+}
+await writeFile(genesisPath, `${JSON.stringify(genesis, null, 2)}\n`);
+NODE
+  echo "Prefunded demo wallets from DEMO_WALLET_MNEMONIC in genesis."
+else
+  echo "Warning: node not found; demo wallet prefunding was not applied to genesis." >&2
+fi
 
 validator_dirs=()
 while IFS= read -r dir; do
@@ -61,12 +102,19 @@ for idx in 1 2 3 4; do
 done
 
 mkdir -p "${GENERATED_DIR}/rpcnode/data"
-openssl rand -hex 32 > "${GENERATED_DIR}/rpcnode/data/key"
-docker run --rm \
-  -u "$(id -u):$(id -g)" \
-  -v "${GENERATED_DIR}/rpcnode/data:/data" \
-  "hyperledger/besu:${BESU_VERSION}" \
-  public-key export --to=/data/key.pub --node-private-key-file=/data/key
+od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "${GENERATED_DIR}/rpcnode/data/key"
+printf '\n' >> "${GENERATED_DIR}/rpcnode/data/key"
+if command -v besu >/dev/null 2>&1; then
+  besu public-key export \
+    --to="${GENERATED_DIR}/rpcnode/data/key.pub" \
+    --node-private-key-file="${GENERATED_DIR}/rpcnode/data/key"
+else
+  docker run --rm \
+    -u "$(id -u):$(id -g)" \
+    -v "${GENERATED_DIR}/rpcnode/data:/data" \
+    "hyperledger/besu:${BESU_VERSION}" \
+    public-key export --to=/data/key.pub --node-private-key-file=/data/key
+fi
 rpc_pubkey="$(tr -d '\n' < "${GENERATED_DIR}/rpcnode/data/key.pub")"
 rpc_pubkey="${rpc_pubkey#0x}"
 rpc_enode="enode://${rpc_pubkey}@${RPC_IP}:30303"
@@ -150,7 +198,7 @@ rpc-http-enabled=true
 rpc-http-host="0.0.0.0"
 rpc-http-port=8545
 rpc-http-api=["ETH","NET","WEB3","QBFT"]
-rpc-http-cors-origins=["http://localhost:5173"]
+rpc-http-cors-origins=["*"]
 rpc-ws-enabled=false
 graphql-http-enabled=false
 
@@ -162,7 +210,7 @@ min-gas-price=0
 permissions-nodes-config-file-enabled=true
 permissions-nodes-config-file="/data/permissions_config.toml"
 
-host-allowlist=["localhost","127.0.0.1","rpcnode","api"]
+host-allowlist=["localhost","127.0.0.1","rpcnode","api","blockscout"]
 logging="INFO"
 EOF
 

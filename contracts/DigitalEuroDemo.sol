@@ -51,7 +51,7 @@ contract DigitalEuroDemo is ERC20, AccessControl {
         return TOKEN_DECIMALS;
     }
 
-    function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+    function mint(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (to == address(0)) {
             revert ZeroAddress();
         }

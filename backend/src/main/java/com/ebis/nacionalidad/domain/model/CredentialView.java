@@ -5,6 +5,12 @@ public record CredentialView(
         long tokenId,
         long caseId,
         String holderAddress,
+        String status,
+        long issuedAtEpochSeconds,
+        long expiresAtEpochSeconds,
+        long dataVersion,
+        int schemaVersion,
+        String dataCommitment,
         boolean revoked,
         String revocationReasonCode,
         String tokenUri) {}

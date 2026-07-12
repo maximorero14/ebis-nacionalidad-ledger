@@ -4,8 +4,9 @@ import type { Session } from "./session";
 export interface AuthContextValue {
   session: Session | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  loginWithWallet: () => Promise<void>;
   logout: () => void;
+  isSigningIn: boolean;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

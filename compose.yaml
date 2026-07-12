@@ -1,0 +1,465 @@
+name: ebis-nacionalidad-ledger
+
+x-besu-image: &besu-image hyperledger/besu:26.6.1
+
+x-besu-common: &besu-common
+  image: *besu-image
+  restart: unless-stopped
+  networks:
+    - besu
+  healthcheck:
+    test: ["CMD", "bash", "/healthcheck.sh"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 30s
+  deploy:
+    resources:
+      limits:
+        memory: 1024M
+
+services:
+  besu-init:
+    image: *besu-image
+    entrypoint: ["bash", "-lc"]
+    command: "./scripts/besu-generate-network.sh"
+    working_dir: /repo
+    volumes:
+      - ./blockchain/besu:/repo/blockchain/besu
+      - ./scripts:/repo/scripts:ro
+    environment:
+      DEMO_WALLET_MNEMONIC: ${DEMO_WALLET_MNEMONIC:-test test test test test test test test test test test junk}
+    restart: "no"
+
+  validator1:
+    <<: *besu-common
+    depends_on:
+      besu-init:
+        condition: service_completed_successfully
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ./blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ./blockchain/besu/generated/validator1:/node:ro
+      - ./blockchain/besu/generated/validator1/data:/data
+      - ./scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
+    networks:
+      besu:
+        ipv4_address: 172.24.0.11
+
+  validator2:
+    <<: *besu-common
+    depends_on:
+      validator1:
+        condition: service_healthy
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ./blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ./blockchain/besu/generated/validator2:/node:ro
+      - ./blockchain/besu/generated/validator2/data:/data
+      - ./scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
+    networks:
+      besu:
+        ipv4_address: 172.24.0.12
+
+  validator3:
+    <<: *besu-common
+    depends_on:
+      validator1:
+        condition: service_healthy
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ./blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ./blockchain/besu/generated/validator3:/node:ro
+      - ./blockchain/besu/generated/validator3/data:/data
+      - ./scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
+    networks:
+      besu:
+        ipv4_address: 172.24.0.13
+
+  validator4:
+    <<: *besu-common
+    depends_on:
+      validator1:
+        condition: service_healthy
+    command:
+      - --config-file=/node/config.toml
+    volumes:
+      - ./blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ./blockchain/besu/generated/validator4:/node:ro
+      - ./blockchain/besu/generated/validator4/data:/data
+      - ./scripts/besu-healthcheck-metrics.sh:/healthcheck.sh:ro
+    networks:
+      besu:
+        ipv4_address: 172.24.0.14
+
+  rpcnode:
+    <<: *besu-common
+    depends_on:
+      validator1:
+        condition: service_healthy
+      validator2:
+        condition: service_healthy
+      validator3:
+        condition: service_healthy
+      validator4:
+        condition: service_healthy
+    command:
+      - --config-file=/node/config.toml
+    ports:
+      - "127.0.0.1:${BESU_RPC_HTTP_PORT:-8545}:8545"
+    volumes:
+      - ./blockchain/besu/generated/genesis.json:/config/genesis.json:ro
+      - ./blockchain/besu/generated/rpcnode:/node:ro
+      - ./blockchain/besu/generated/rpcnode/data:/data
+      - ./scripts/besu-healthcheck-rpc.sh:/healthcheck.sh:ro
+    healthcheck:
+      test: ["CMD", "bash", "/healthcheck.sh"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      besu:
+        ipv4_address: 172.24.0.15
+
+  postgres:
+    image: postgres:17.10-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ebis_demo}
+      POSTGRES_USER: ${POSTGRES_USER:-ebis_demo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-demo-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5434}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-ebis_demo} -d $${POSTGRES_DB:-ebis_demo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  contracts:
+    build:
+      context: .
+      dockerfile: Dockerfile.contracts
+    depends_on:
+      rpcnode:
+        condition: service_healthy
+    environment:
+      BESU_LOCAL_RPC_URL: http://rpcnode:8545
+      DEMO_WALLET_MNEMONIC: ${DEMO_WALLET_MNEMONIC:-test test test test test test test test test test test junk}
+    volumes:
+      - ./generated:/app/generated
+    restart: "no"
+    networks:
+      - besu
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rpcnode:
+        condition: service_healthy
+      contracts:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-ebis_demo}
+      POSTGRES_USER: ${POSTGRES_USER:-ebis_demo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-demo-only}
+      BESU_LOCAL_RPC_URL: http://rpcnode:8545
+      CONTRACTS_MANIFEST_PATH: /app/generated/deployments/besuLocal.json
+      API_JWT_SECRET: ${API_JWT_SECRET:-replace-with-local-random-demo-secret}
+      API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-http://localhost:5173}
+      SIWE_DOMAIN: ${SIWE_DOMAIN:-localhost}
+      SIWE_URI: ${SIWE_URI:-http://localhost:5173}
+      SIWE_CHAIN_ID: ${SIWE_CHAIN_ID:-20260711}
+      OTEL_SERVICE_NAME: ebis-api
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_PROBABILITY: ${OTEL_TRACES_SAMPLER_PROBABILITY:-1.0}
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    volumes:
+      - ./generated:/app/generated:ro
+    restart: unless-stopped
+    networks:
+      - besu
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+        VITE_BESU_RPC_URL: ${VITE_BESU_RPC_URL:-http://localhost:8545}
+        VITE_BESU_CHAIN_ID: ${VITE_BESU_CHAIN_ID:-20260711}
+        VITE_SIWE_DOMAIN: ${VITE_SIWE_DOMAIN:-localhost}
+        VITE_SIWE_URI: ${VITE_SIWE_URI:-http://localhost:5173}
+        VITE_WALLETCONNECT_PROJECT_ID: ${VITE_WALLETCONNECT_PROJECT_ID:-ebis-local-dev}
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    restart: unless-stopped
+    networks:
+      - besu
+
+  blockscout-postgres:
+    image: postgres:17.10-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: blockscout
+      POSTGRES_USER: blockscout
+      POSTGRES_PASSWORD: ${BLOCKSCOUT_POSTGRES_PASSWORD:-blockscout-demo-only}
+    volumes:
+      - blockscout-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blockscout -d blockscout"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  blockscout:
+    image: ghcr.io/blockscout/blockscout:${BLOCKSCOUT_BACKEND_TAG:-latest}
+    depends_on:
+      rpcnode:
+        condition: service_healthy
+      blockscout-postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" && bin/blockscout start
+    environment:
+      DATABASE_URL: postgresql://blockscout:${BLOCKSCOUT_POSTGRES_PASSWORD:-blockscout-demo-only}@blockscout-postgres:5432/blockscout?ssl=false
+      ECTO_USE_SSL: "false"
+      SECRET_KEY_BASE: ${BLOCKSCOUT_SECRET_KEY_BASE:-ebis-blockscout-local-secret-key-base-change-me-demo-only}
+      ETHEREUM_JSONRPC_VARIANT: geth
+      ETHEREUM_JSONRPC_HTTP_URL: http://rpcnode:8545/
+      ETHEREUM_JSONRPC_TRACE_URL: http://rpcnode:8545/
+      ETHEREUM_JSONRPC_DISABLE_ARCHIVE_BALANCES: "true"
+      CHAIN_ID: ${VITE_BESU_CHAIN_ID:-20260711}
+      NETWORK: EBIS Nacionalidad
+      SUBNETWORK: Besu local
+      COIN: BESU
+      PORT: 4000
+      MIX_ENV: prod
+      API_V2_ENABLED: "true"
+      CORS_ORIGIN: "*"
+      CHECK_ORIGIN: "false"
+      DISABLE_EXCHANGE_RATES: "true"
+      INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: "true"
+      INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: "true"
+    ports:
+      - "127.0.0.1:${BLOCKSCOUT_API_PORT:-4001}:4000"
+    restart: unless-stopped
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  blockscout-frontend:
+    image: ghcr.io/blockscout/frontend:${BLOCKSCOUT_FRONTEND_TAG:-latest}
+    platform: linux/amd64
+    depends_on:
+      - blockscout
+    environment:
+      NEXT_PUBLIC_API_PROTOCOL: http
+      NEXT_PUBLIC_API_HOST: localhost:${BLOCKSCOUT_API_PORT:-4001}
+      NEXT_PUBLIC_API_BASE_PATH: /
+      NEXT_PUBLIC_APP_PROTOCOL: http
+      NEXT_PUBLIC_APP_HOST: localhost:${BLOCKSCOUT_PORT:-4000}
+      NEXT_PUBLIC_NETWORK_NAME: EBIS Nacionalidad Local
+      NEXT_PUBLIC_NETWORK_SHORT_NAME: EBIS Local
+      NEXT_PUBLIC_NETWORK_ID: ${VITE_BESU_CHAIN_ID:-20260711}
+      NEXT_PUBLIC_NETWORK_CURRENCY_NAME: Besu local ether
+      NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL: BESU
+      NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: 18
+      NEXT_PUBLIC_IS_TESTNET: "true"
+      NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL: ws
+      NEXT_PUBLIC_HOMEPAGE_CHARTS: '["daily_txs"]'
+    ports:
+      - "127.0.0.1:${BLOCKSCOUT_PORT:-4000}:3000"
+    restart: unless-stopped
+    networks:
+      - besu
+
+  loki:
+    image: grafana/loki:3.4.2
+    command:
+      - -config.file=/etc/loki/config.yml
+    ports:
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  promtail:
+    image: grafana/promtail:3.4.2
+    depends_on:
+      - loki
+    command:
+      - -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    restart: unless-stopped
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    user: "0:0"
+    command:
+      - -config.file=/etc/tempo/config.yml
+    ports:
+      - "127.0.0.1:${TEMPO_PORT:-3200}:3200"
+    volumes:
+      - ./monitoring/tempo-config.yml:/etc/tempo/config.yml:ro
+      - tempo-data:/var/tempo
+    restart: unless-stopped
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    depends_on:
+      - tempo
+    command:
+      - --config=/etc/otelcol/config.yml
+    ports:
+      - "127.0.0.1:${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./monitoring/otel-collector-config.yml:/etc/otelcol/config.yml:ro
+    restart: unless-stopped
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  prometheus:
+    image: prom/prometheus:v3.8.1
+    depends_on:
+      - api
+      - otel-collector
+      - rpcnode
+      - validator1
+      - validator2
+      - validator3
+      - validator4
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin-demo-only}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ebis-observability.json
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3002}:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q 'ok'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - besu
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+networks:
+  besu:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.24.0.0/24
+
+volumes:
+  postgres-data:
+  blockscout-postgres-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  tempo-data:

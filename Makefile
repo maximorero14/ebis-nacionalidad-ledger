@@ -1,8 +1,13 @@
 GITLEAKS_VERSION := v8.30.1
 BESU_VERSION := 26.6.1
-COMPOSE_FILE := infra/compose.yaml
+COMPOSE_FILE := compose.yaml
 
-.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate up down logs network-status reset-demo deploy verify-deployment test-integration seed seed-verify
+ifneq ("$(wildcard .env)","")
+include .env
+export
+endif
+
+.PHONY: security secret-scan contracts-install contracts-build contracts-test contracts-coverage contracts-gas besu-generate demo-wallets docker-prune-build-cache up demo-simple demo-simple-clean-build demo-complete down clean-demo-state logs network-status reset-demo deploy verify-deployment test-integration seed-simple seed seed-verify
 
 security: secret-scan
 
@@ -27,11 +32,33 @@ contracts-gas:
 besu-generate:
 	BESU_VERSION=$(BESU_VERSION) ./scripts/besu-generate-network.sh
 
-up: besu-generate
-	docker compose -f $(COMPOSE_FILE) up -d
+demo-wallets:
+	node scripts/demo-wallets.js
 
-down:
-	docker compose -f $(COMPOSE_FILE) down
+docker-prune-build-cache:
+	docker builder prune -f
+	docker image prune -f
+
+up: clean-demo-state besu-generate
+	docker compose -f $(COMPOSE_FILE) up -d --build
+
+demo-simple: up
+	$(MAKE) verify-deployment
+	$(MAKE) seed-simple
+	@node scripts/demo-wallets.js
+
+demo-simple-clean-build: docker-prune-build-cache demo-simple
+
+demo-complete: demo-simple
+	$(MAKE) seed
+	$(MAKE) seed-verify
+
+down: clean-demo-state
+
+clean-demo-state:
+	docker compose -f $(COMPOSE_FILE) down -v --remove-orphans
+	rm -rf blockchain/besu/generated
+	rm -rf generated/deployments
 
 logs:
 	docker compose -f $(COMPOSE_FILE) logs -f --tail=200
@@ -52,10 +79,7 @@ reset-demo:
 		echo "=================================================================="; \
 		exit 1; \
 	fi
-	docker compose -f $(COMPOSE_FILE) down -v
-	rm -rf blockchain/besu/generated
-	BESU_VERSION=$(BESU_VERSION) ./scripts/besu-generate-network.sh
-	docker compose -f $(COMPOSE_FILE) up -d
+	$(MAKE) demo-complete
 
 deploy:
 	BESU_DEPLOYER_PRIVATE_KEY=$${BESU_DEPLOYER_PRIVATE_KEY:-$$(node scripts/print-dev-private-key.js 0)} \
@@ -63,17 +87,17 @@ deploy:
 		npm run deploy
 
 verify-deployment:
-	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
-		npm run verify-deployment
+	docker compose -f $(COMPOSE_FILE) run --rm contracts npm run verify-deployment
 
 test-integration:
 	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
 		npm run test:integration
 
 seed:
-	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
-		npm run seed
+	docker compose -f $(COMPOSE_FILE) run --rm contracts npm run seed
+
+seed-simple:
+	docker compose -f $(COMPOSE_FILE) run --rm contracts npm run seed:simple
 
 seed-verify:
-	BESU_LOCAL_RPC_URL=$${BESU_LOCAL_RPC_URL:-http://127.0.0.1:8545} \
-		npm run seed:verify
+	docker compose -f $(COMPOSE_FILE) run --rm contracts npm run seed:verify

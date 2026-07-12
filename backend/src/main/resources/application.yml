@@ -16,6 +16,11 @@ app:
     jwt:
       secret: ${API_JWT_SECRET}
       ttl-minutes: 15
+    siwe:
+      domain: ${SIWE_DOMAIN:localhost}
+      uri: ${SIWE_URI:http://localhost:5173}
+      chain-id: ${SIWE_CHAIN_ID:20260711}
+      challenge-ttl-minutes: 5
     cors:
       allowed-origins: ${API_ALLOWED_ORIGINS:http://localhost:5173}
   contracts:
@@ -25,10 +30,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
 
 springdoc:
   swagger-ui:

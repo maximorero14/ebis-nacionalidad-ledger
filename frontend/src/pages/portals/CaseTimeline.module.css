@@ -1,0 +1,124 @@
+.timelineCard {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-5);
+}
+
+.heading {
+  width: min(100%, 48rem);
+}
+
+.heading h2 {
+  margin-bottom: var(--space-2);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.timeline {
+  position: relative;
+  display: grid;
+  width: min(100%, 48rem);
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.timeline::before {
+  position: absolute;
+  top: var(--space-5);
+  bottom: var(--space-5);
+  left: 1.15rem;
+  width: 2px;
+  content: "";
+  background: linear-gradient(180deg, var(--color-secondary), var(--color-border));
+}
+
+.item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.35rem minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border: 1px solid rgba(242, 201, 76, 0.42);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--color-primary), #6e0c22 58%, var(--color-secondary));
+  color: var(--color-primary-contrast);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  box-shadow: var(--shadow-sm);
+}
+
+.content {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.title {
+  display: block;
+  color: var(--color-text);
+  font-weight: 850;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.block {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.12rem var(--space-2);
+  background: var(--color-neutral-bg);
+  color: var(--color-secondary);
+  font-weight: 800;
+}
+
+.future .marker {
+  border-color: var(--color-border);
+  background: var(--color-neutral-bg);
+  color: var(--color-text-muted);
+  box-shadow: none;
+}
+
+.future .content {
+  border-style: dashed;
+  opacity: 0.78;
+}
+
+@media (max-width: 560px) {
+  .timeline::before {
+    left: 0.95rem;
+  }
+
+  .item {
+    grid-template-columns: 1.95rem minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .marker {
+    width: 1.95rem;
+    height: 1.95rem;
+  }
+}

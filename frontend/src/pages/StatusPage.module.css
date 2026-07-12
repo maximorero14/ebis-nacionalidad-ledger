@@ -1,0 +1,29 @@
+.status {
+  display: grid;
+  min-height: min(34rem, calc(100vh - 10rem));
+  place-items: center;
+}
+
+.card {
+  width: min(100%, 34rem);
+  text-align: center;
+}
+
+.code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.5rem;
+  border: 1px solid rgba(242, 201, 76, 0.36);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-neutral-bg);
+  color: var(--color-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+}
+
+.copy {
+  color: var(--color-text-muted);
+}

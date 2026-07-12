@@ -19,7 +19,19 @@ class CredentialQueryServiceTest {
 
     @Test
     void getCredentialReturnsTheDecodedView() {
-        CredentialView view = new CredentialView(1L, 1L, "0xholder", false, "0x00", "demo://1");
+        CredentialView view = new CredentialView(
+                1L,
+                1L,
+                "0xholder",
+                "ACTIVE",
+                1_720_000_000L,
+                1_877_680_000L,
+                1L,
+                1,
+                "0xcommitment",
+                false,
+                "0x00",
+                "demo://1");
         when(ledgerClient.readCredential(1L)).thenReturn(Optional.of(view));
         CredentialQueryService service = new CredentialQueryService(ledgerClient);
 

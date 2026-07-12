@@ -15,7 +15,13 @@ contract MockNationalityCredential is INationalityCredential {
         address indexed holder
     );
 
-    function mintForCase(uint256 caseId, address holder) external returns (uint256 tokenId) {
+    function mintForCase(
+        uint256 caseId,
+        address holder,
+        uint64,
+        bytes32,
+        uint16
+    ) external returns (uint256 tokenId) {
         tokenId = caseId;
         if (mintedToken[tokenId]) {
             revert CredentialAlreadyIssued(caseId, tokenId);
@@ -25,4 +31,6 @@ contract MockNationalityCredential is INationalityCredential {
         holderByCase[caseId] = holder;
         emit MockCredentialIssued(caseId, tokenId, holder);
     }
+
+    function renew(uint256, uint64, bytes32, uint16) external {}
 }

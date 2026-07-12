@@ -51,8 +51,11 @@ export function VerifierPortalPage() {
 
   return (
     <div className={styles["page"]}>
-      <Card>
-        <h1>Portal verificador</h1>
+      <Card className={styles["hero"]}>
+        <div>
+          <p className={styles["eyebrow"]}>Consulta publica</p>
+          <h1>Portal verificador</h1>
+        </div>
         <p className={styles["hint"]}>
           Consulta publica: no hace falta iniciar sesion. En un despliegue real, un QR codificaria
           un enlace como el que genera este formulario; aqui se simula escribiendo el identificador
@@ -94,16 +97,6 @@ export function VerifierPortalPage() {
               ) : (
                 <Badge tone="danger">Revocada</Badge>
               )}
-
-              <div className={styles["section"]}>
-                <h2>Verificacion de mayoria de edad</h2>
-                <p className={styles["hint"]}>
-                  Esta demo todavia no implementa la prueba criptografica de mayoria de edad
-                  (diferida a M9, ver ADR-006 y docs/CONTRATOS.md). Cuando este disponible, este
-                  panel mostrara unicamente el resultado — cumple o no cumple — nunca la fecha de
-                  nacimiento.
-                </p>
-              </div>
 
               <div className={styles["section"]}>
                 <Button

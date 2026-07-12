@@ -96,6 +96,7 @@ contract NationalityCaseRegistry is AccessControl {
         bytes32 reasonCode
     );
     event CredentialIssued(uint256 indexed caseId, uint256 indexed tokenId, address indexed holder);
+    event CredentialRenewed(uint256 indexed caseId, uint256 indexed tokenId, address indexed actor);
 
     constructor(
         IERC20 feeToken_,
@@ -252,7 +253,12 @@ contract NationalityCaseRegistry is AccessControl {
         emit CaseRejected(caseId, msg.sender, caseData.reviewRound, reasonCode);
     }
 
-    function issueCredential(uint256 caseId) external returns (uint256 tokenId) {
+    function issueCredential(
+        uint256 caseId,
+        uint64 expiresAt,
+        bytes32 dataCommitment,
+        uint16 schemaVersion
+    ) external returns (uint256 tokenId) {
         _requireRole(CREDENTIAL_ISSUER_ROLE);
 
         CaseData storage caseData = _existingCase(caseId);
@@ -264,11 +270,39 @@ contract NationalityCaseRegistry is AccessControl {
         }
 
         caseData.credentialTokenId = caseId;
-        tokenId = credential.mintForCase(caseId, caseData.owner);
+        tokenId = credential.mintForCase(
+            caseId,
+            caseData.owner,
+            expiresAt,
+            dataCommitment,
+            schemaVersion
+        );
         if (tokenId != caseId) {
             revert UnexpectedCredentialToken(caseId, tokenId);
         }
         emit CredentialIssued(caseId, tokenId, caseData.owner);
+    }
+
+    function renewCredential(
+        uint256 caseId,
+        uint64 newExpiresAt,
+        bytes32 newDataCommitment,
+        uint16 newSchemaVersion
+    ) external {
+        _requireRole(CREDENTIAL_ISSUER_ROLE);
+
+        CaseData storage caseData = _existingCase(caseId);
+        if (caseData.credentialTokenId == 0) {
+            revert InvalidCase(caseId);
+        }
+
+        credential.renew(
+            caseData.credentialTokenId,
+            newExpiresAt,
+            newDataCommitment,
+            newSchemaVersion
+        );
+        emit CredentialRenewed(caseId, caseData.credentialTokenId, msg.sender);
     }
 
     function getCase(uint256 caseId) external view returns (CaseData memory) {

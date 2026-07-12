@@ -44,9 +44,8 @@ function stepState(
 
 /**
  * The M7.6 stepper: preparando -> firmando/enviando -> pendiente -> confirmada/fallida.
- * There is no client-side wallet in this demo (the backend signs and broadcasts, see
- * M6.3/DemoActorCredentials), so "firmando y enviando" covers the whole synchronous
- * backend wait (up to 30s, M6.4), not a wallet popup.
+ * Wallet and backend-originated transaction flows both surface the same user-visible
+ * phases, so "firmando y enviando" covers the submit step in either case.
  */
 export function TransactionProgress({
   phase,

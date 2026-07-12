@@ -1,7 +1,8 @@
 package com.ebis.nacionalidad.infrastructure.web;
 
-import com.ebis.nacionalidad.application.AuthenticationService;
-import com.ebis.nacionalidad.application.InvalidCredentialsException;
+import com.ebis.nacionalidad.application.InvalidWalletSignatureException;
+import com.ebis.nacionalidad.application.OnChainAuthorizationService;
+import com.ebis.nacionalidad.application.WalletAuthenticationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -16,35 +17,43 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@Tag(name = "Auth", description = "Identidades demo y sesiones de corta duracion")
+@Tag(name = "Auth", description = "Sesion SIWE vinculada a la wallet")
 public class AuthController {
 
-    private final AuthenticationService authenticationService;
+    private final WalletAuthenticationService authenticationService;
+    private final OnChainAuthorizationService authorizationService;
 
-    public AuthController(AuthenticationService authenticationService) {
+    public AuthController(
+            WalletAuthenticationService authenticationService, OnChainAuthorizationService authorizationService) {
         this.authenticationService = authenticationService;
+        this.authorizationService = authorizationService;
     }
 
-    @PostMapping("/auth/login")
-    @Operation(summary = "Inicia sesion con una identidad demo y devuelve un JWT de corta duracion")
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        return LoginResponse.from(authenticationService.login(request.username(), request.password()));
+    @PostMapping("/auth/nonce")
+    @Operation(summary = "Genera un nonce SIWE de un solo uso para la wallet")
+    public WalletNonceResponse nonce(@Valid @RequestBody WalletNonceRequest request) {
+        return WalletNonceResponse.from(authenticationService.createChallenge(request.address(), request.chainId()));
+    }
+
+    @PostMapping("/auth/verify")
+    @Operation(summary = "Verifica el mensaje SIWE firmado y devuelve un JWT corto")
+    public WalletLoginResponse verify(@Valid @RequestBody WalletVerifyRequest request) {
+        return WalletLoginResponse.from(authenticationService.verify(request.message(), request.signature()));
     }
 
     @GetMapping("/auth/me")
-    @Operation(summary = "Identidad, rol y address EVM del usuario autenticado")
+    @Operation(summary = "Address autenticada y capacidades on-chain actuales")
     public MeResponse me(@AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedWallet wallet = AuthenticatedWallet.from(jwt);
         return new MeResponse(
-                jwt.getSubject(),
-                jwt.getClaimAsString(AuthenticationService.CLAIM_ROLE),
-                jwt.getClaimAsString(AuthenticationService.CLAIM_EVM_ADDRESS));
+                wallet.address(), wallet.chainId(), authorizationService.capabilitiesFor(wallet.address()));
     }
 
-    @ExceptionHandler(InvalidCredentialsException.class)
+    @ExceptionHandler(InvalidWalletSignatureException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public ErrorResponse handleInvalidCredentials(InvalidCredentialsException exception) {
+    public ErrorResponse handleInvalidWalletSignature(InvalidWalletSignatureException exception) {
         return new ErrorResponse(exception.getMessage());
     }
 
-    public record MeResponse(String username, String role, String evmAddress) {}
+    public record MeResponse(String address, long chainId, com.ebis.nacionalidad.domain.model.WalletCapabilities capabilities) {}
 }

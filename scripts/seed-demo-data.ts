@@ -2,27 +2,16 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { network } from "hardhat";
 import { createWalletClient, http, keccak256, parseEventLogs, toHex } from "viem";
-import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { demoAccounts } from "./demo-wallets.js";
 
-// Same public devnet mnemonic funded in blockchain/besu/qbftConfigFile.json.
-// See blockchain/besu/README.md — no private keys are committed, all derived locally.
-const DEV_MNEMONIC = "test test test test test test test test test test test junk";
 const NETWORK_NAME = "besuLocal";
 const RPC_URL = process.env.BESU_LOCAL_RPC_URL ?? "http://127.0.0.1:8545";
 const REVOCATION_REASON = keccak256(toHex("SEED_DEMO_REVOCATION"));
 const REMEDIATION_REASON = keccak256(toHex("SEED_DEMO_MISSING_DOCUMENT"));
 const REJECTION_REASON = keccak256(toHex("SEED_DEMO_FAILED_POLICE_VALIDATION"));
-
-const ACTORS = {
-  foreignAffairs: 2,
-  police: 3,
-  issuer: 4,
-  citizen: 5
-};
-
-function devAccount(index) {
-  return mnemonicToAccount(DEV_MNEMONIC, { addressIndex: index });
-}
+const SCHEMA_VERSION = 1;
+const FIVE_YEARS_SECONDS = 5n * 365n * 24n * 60n * 60n;
 
 function manifestPath() {
   return path.join(process.cwd(), "generated", "deployments", `${NETWORK_NAME}.json`);
@@ -36,6 +25,14 @@ function documentCommitment(label) {
   return keccak256(toHex(`seed-demo-document-commitment:${label}`));
 }
 
+function digitalIdentityCommitment(label) {
+  return keccak256(toHex(`seed-demo-digital-identity:${label}`));
+}
+
+function demoExpiry() {
+  return BigInt(Math.floor(Date.now() / 1000)) + FIVE_YEARS_SECONDS;
+}
+
 async function mineWrite(publicClient, promise) {
   const hash = await promise;
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -43,7 +40,7 @@ async function mineWrite(publicClient, promise) {
 }
 
 async function createFundedCase(context, label) {
-  const { registry, token, publicClient, citizen, issuer, feeAmount, free } = context;
+  const { registry, token, publicClient, admin, citizen, feeAmount, free } = context;
 
   const { receipt: createReceipt } = await mineWrite(
     publicClient,
@@ -65,7 +62,7 @@ async function createFundedCase(context, label) {
   );
   await mineWrite(
     publicClient,
-    token.write.mint([citizen.address, feeAmount], { account: issuer, ...free })
+    token.write.mint([citizen.address, feeAmount], { account: admin, ...free })
   );
   await mineWrite(
     publicClient,
@@ -105,14 +102,17 @@ async function main() {
     clientConfig
   );
 
+  const accounts = demoAccounts();
   const context = {
     registry,
     token,
     publicClient,
-    citizen: devAccount(ACTORS.citizen),
-    foreignAffairs: devAccount(ACTORS.foreignAffairs),
-    police: devAccount(ACTORS.police),
-    issuer: devAccount(ACTORS.issuer),
+    admin: privateKeyToAccount(accounts.admin.privateKey),
+    citizen: privateKeyToAccount(accounts.citizen.privateKey),
+    foreignAffairs: privateKeyToAccount(accounts.foreignAffairs.privateKey),
+    police: privateKeyToAccount(accounts.police.privateKey),
+    issuer: privateKeyToAccount(accounts.issuer.privateKey),
+    revoker: privateKeyToAccount(accounts.revoker.privateKey),
     feeAmount: BigInt(manifest.parameters.feeAmount),
     // Pin gasPrice=0 explicitly: viem's automatic fee estimation is non-zero even on
     // this zero-basefee network (see docs/evidencias/M5_DESPLIEGUE.md, M5.2 finding).
@@ -136,7 +136,10 @@ async function main() {
   );
   const { receipt: issueReceipt } = await mineWrite(
     publicClient,
-    registry.write.issueCredential([happyCaseId], { account: context.issuer, ...context.free })
+    registry.write.issueCredential(
+      [happyCaseId, demoExpiry(), digitalIdentityCommitment("happy:v1"), SCHEMA_VERSION],
+      { account: context.issuer, ...context.free }
+    )
   );
   console.log(`[happy] case #${happyCaseId} approved and credential issued`);
   results.happy = { caseId: happyCaseId.toString(), status: "APPROVED_WITH_CREDENTIAL" };
@@ -183,12 +186,15 @@ async function main() {
   );
   await mineWrite(
     publicClient,
-    registry.write.issueCredential([revokedCaseId], { account: context.issuer, ...context.free })
+    registry.write.issueCredential(
+      [revokedCaseId, demoExpiry(), digitalIdentityCommitment("revoked:v1"), SCHEMA_VERSION],
+      { account: context.issuer, ...context.free }
+    )
   );
   await mineWrite(
     publicClient,
     credential.write.revoke([revokedCaseId, REVOCATION_REASON], {
-      account: context.issuer,
+      account: context.revoker,
       ...context.free
     })
   );

@@ -10,8 +10,7 @@
 export const REMEDIATION_REASON_CODES = [
   { value: "MISSING_DEMO_DOCUMENT", label: "Falta un documento requerido" },
   { value: "INVALID_DEMO_FORMAT", label: "Formato de documento invalido" },
-  { value: "INCONSISTENT_DEMO_REFERENCE", label: "Referencia documental inconsistente" },
-  { value: "AGE_COMMITMENT_REQUIRED", label: "Falta el compromiso de mayoria de edad" }
+  { value: "INCONSISTENT_DEMO_REFERENCE", label: "Referencia documental inconsistente" }
 ] as const;
 
 export const REJECTION_REASON_CODES = [

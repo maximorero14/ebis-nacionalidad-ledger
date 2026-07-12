@@ -1,6 +1,20 @@
 import { z } from "zod";
 
-/** Mirrors backend ApplicationRole (domain/model/ApplicationRole.java). */
+export const walletCapabilitiesSchema = z.object({
+  isRegistryAdmin: z.boolean(),
+  isTokenAdmin: z.boolean(),
+  isCredentialAdmin: z.boolean(),
+  canReviewForeignAffairs: z.boolean(),
+  canReviewPolice: z.boolean(),
+  canIssueCredential: z.boolean(),
+  canRevokeCredential: z.boolean(),
+  canMintDemoEuro: z.boolean(),
+  canManageFaucet: z.boolean(),
+  canCollectFees: z.boolean()
+});
+export type WalletCapabilities = z.infer<typeof walletCapabilitiesSchema>;
+
+/** Legacy role names kept for labels and old tests while auth moves to wallet capabilities. */
 export const applicationRoleSchema = z.enum([
   "CITIZEN",
   "FOREIGN_AFFAIRS",
@@ -9,18 +23,27 @@ export const applicationRoleSchema = z.enum([
 ]);
 export type ApplicationRole = z.infer<typeof applicationRoleSchema>;
 
-export const loginRequestSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1)
+export const walletNonceResponseSchema = z.object({
+  nonce: z.string(),
+  address: z.string(),
+  chainId: z.number(),
+  issuedAt: z.string(),
+  expiresAt: z.string()
 });
-export type LoginRequest = z.infer<typeof loginRequestSchema>;
+export type WalletNonceResponse = z.infer<typeof walletNonceResponseSchema>;
 
-/** Mirrors backend LoginResponse (infrastructure/web/LoginResponse.java). */
-export const loginResponseSchema = z.object({
+export const walletLoginResponseSchema = z.object({
   accessToken: z.string(),
-  tokenType: z.string(),
   expiresAt: z.string(),
-  role: applicationRoleSchema,
-  evmAddress: z.string()
+  address: z.string(),
+  chainId: z.number(),
+  capabilities: walletCapabilitiesSchema
 });
-export type LoginResponse = z.infer<typeof loginResponseSchema>;
+export type WalletLoginResponse = z.infer<typeof walletLoginResponseSchema>;
+
+export const meResponseSchema = z.object({
+  address: z.string(),
+  chainId: z.number(),
+  capabilities: walletCapabilitiesSchema
+});
+export type MeResponse = z.infer<typeof meResponseSchema>;

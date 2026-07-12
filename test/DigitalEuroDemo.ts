@@ -48,12 +48,14 @@ describe("DigitalEuroDemo", function () {
     assert.equal(await token.read.hasRole([feeCollectorRole, admin.account.address]), true);
   });
 
-  it("mints only through MINTER_ROLE", async function () {
-    const { token, citizen, other } = await networkHelpers.loadFixture(deployTokenFixture);
+  it("mints only through DEFAULT_ADMIN_ROLE", async function () {
+    const { token, admin, citizen, other } = await networkHelpers.loadFixture(deployTokenFixture);
+    const minterRole = await token.read.MINTER_ROLE();
 
     await token.write.mint([citizen.account.address, 250_00n]);
     assert.equal(await token.read.balanceOf([citizen.account.address]), 250_00n);
 
+    await token.write.grantRole([minterRole, other.account.address], { account: admin.account });
     await assert.rejects(
       token.write.mint([other.account.address, 1n], { account: other.account }),
       /AccessControlUnauthorizedAccount/

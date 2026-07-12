@@ -19,6 +19,7 @@
     "deploy": "hardhat run scripts/deploy-contracts.ts",
     "verify-deployment": "hardhat run scripts/verify-deployment.ts",
     "test:integration": "hardhat run scripts/integration-test-besu.ts",
+    "seed:simple": "hardhat run scripts/seed-demo-simple.ts",
     "seed": "hardhat run scripts/seed-demo-data.ts",
     "seed:verify": "hardhat run scripts/verify-seed-data.ts"
   },

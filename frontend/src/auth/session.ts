@@ -1,18 +1,18 @@
-import type { ApplicationRole } from "./schemas";
+import type { WalletCapabilities } from "./schemas";
 
 const STORAGE_KEY = "ebis.session";
 
 export interface Session {
   accessToken: string;
-  role: ApplicationRole;
-  evmAddress: string;
+  address: string;
+  chainId: number;
+  capabilities: WalletCapabilities;
   expiresAt: string;
 }
 
 /**
- * sessionStorage (not localStorage): the demo JWT is short-lived (15 min, see
- * AuthenticationService) and scoping it to the tab lifetime is a reasonable default for
- * a demo — never persisted longer than the browser session.
+ * sessionStorage (not localStorage): the wallet JWT is short-lived (15 min by default)
+ * and scoped to the tab lifetime.
  */
 export function loadSession(): Session | null {
   const raw = sessionStorage.getItem(STORAGE_KEY);

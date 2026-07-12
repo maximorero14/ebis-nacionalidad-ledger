@@ -7,8 +7,15 @@ const { viem, networkHelpers } = await network.create();
 
 const DOC_1 = keccak256(stringToHex("document-commitment-1"));
 const DOC_2 = keccak256(stringToHex("document-commitment-2"));
+const COMMITMENT_V1 = keccak256(stringToHex("digital-id-private-data-v1"));
+const COMMITMENT_V2 = keccak256(stringToHex("digital-id-private-data-v2"));
 const REMEDIATION_REASON = keccak256(stringToHex("MISSING_DOCUMENT"));
 const REJECTION_REASON = keccak256(stringToHex("FAILED_POLICE_VALIDATION"));
+const SCHEMA_VERSION = 1;
+
+async function futureExpiry(seconds = 365 * 24 * 60 * 60) {
+  return BigInt(await networkHelpers.time.latest()) + BigInt(seconds);
+}
 
 describe("NationalityCaseRegistry", function () {
   async function deployRegistryFixture() {
@@ -324,7 +331,9 @@ describe("NationalityCaseRegistry", function () {
     assert.equal(rejected.status, 7);
 
     await assert.rejects(
-      registry.write.issueCredential([1n], { account: issuer.account }),
+      registry.write.issueCredential([1n, await futureExpiry(), COMMITMENT_V1, SCHEMA_VERSION], {
+        account: issuer.account
+      }),
       /CaseNotApproved/
     );
   });
@@ -341,7 +350,12 @@ describe("NationalityCaseRegistry", function () {
     const approved = await registry.read.getCase([1n]);
     assert.equal(approved.status, 6);
 
-    await registry.write.issueCredential([1n], { account: issuer.account });
+    await registry.write.issueCredential(
+      [1n, await futureExpiry(), COMMITMENT_V1, SCHEMA_VERSION],
+      {
+        account: issuer.account
+      }
+    );
     const issued = await registry.read.getCase([1n]);
 
     assert.equal(issued.credentialTokenId, 1n);
@@ -350,8 +364,17 @@ describe("NationalityCaseRegistry", function () {
       getAddress(citizen.account.address)
     );
 
+    await registry.write.renewCredential(
+      [1n, await futureExpiry(), COMMITMENT_V2, SCHEMA_VERSION],
+      {
+        account: issuer.account
+      }
+    );
+
     await assert.rejects(
-      registry.write.issueCredential([1n], { account: issuer.account }),
+      registry.write.issueCredential([1n, await futureExpiry(), COMMITMENT_V1, SCHEMA_VERSION], {
+        account: issuer.account
+      }),
       /CredentialAlreadyIssued/
     );
   });

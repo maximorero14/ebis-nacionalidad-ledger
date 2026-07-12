@@ -3,25 +3,13 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { network } from "hardhat";
 import { createWalletClient, http, keccak256, parseEventLogs, toHex } from "viem";
-import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { demoAccounts } from "./demo-wallets.js";
 
-// Same public devnet mnemonic funded in blockchain/besu/qbftConfigFile.json.
-// See blockchain/besu/README.md — no private keys are committed, all derived locally.
-const DEV_MNEMONIC = "test test test test test test test test test test test junk";
 const NETWORK_NAME = "besuLocal";
 const RPC_URL = process.env.BESU_LOCAL_RPC_URL ?? "http://127.0.0.1:8545";
-
-const ACTORS = {
-  treasury: 1,
-  foreignAffairs: 2,
-  police: 3,
-  issuer: 4,
-  citizen: 5
-};
-
-function devAccount(index) {
-  return mnemonicToAccount(DEV_MNEMONIC, { addressIndex: index });
-}
+const SCHEMA_VERSION = 1;
+const FIVE_YEARS_SECONDS = 5n * 365n * 24n * 60n * 60n;
 
 function manifestPath() {
   return path.join(process.cwd(), "generated", "deployments", `${NETWORK_NAME}.json`);
@@ -29,6 +17,10 @@ function manifestPath() {
 
 function ok(label) {
   console.log(`OK: ${label}`);
+}
+
+function demoExpiry() {
+  return BigInt(Math.floor(Date.now() / 1000)) + FIVE_YEARS_SECONDS;
 }
 
 async function expectRevert(promise, pattern, label) {
@@ -69,10 +61,12 @@ async function main() {
     client
   );
 
-  const citizen = devAccount(ACTORS.citizen);
-  const foreignAffairs = devAccount(ACTORS.foreignAffairs);
-  const police = devAccount(ACTORS.police);
-  const issuer = devAccount(ACTORS.issuer);
+  const demo = demoAccounts();
+  const admin = privateKeyToAccount(demo.admin.privateKey);
+  const citizen = privateKeyToAccount(demo.citizen.privateKey);
+  const foreignAffairs = privateKeyToAccount(demo.foreignAffairs.privateKey);
+  const police = privateKeyToAccount(demo.police.privateKey);
+  const issuer = privateKeyToAccount(demo.issuer.privateKey);
   const stranger = privateKeyToAccount(generatePrivateKey());
 
   const feeAmount = BigInt(manifest.parameters.feeAmount);
@@ -106,7 +100,7 @@ async function main() {
   ok("submitDocuments mined");
 
   const mintHash = await token.write.mint([citizen.address, feeAmount], {
-    account: issuer,
+    account: admin,
     ...free
   });
   await publicClient.waitForTransactionReceipt({ hash: mintHash });
@@ -139,7 +133,15 @@ async function main() {
   assert.equal(caseAfterApprovals.status, 6);
   ok("case reaches APPROVED after both independent approvals");
 
-  const issueHash = await registry.write.issueCredential([caseId], { account: issuer, ...free });
+  const issueHash = await registry.write.issueCredential(
+    [
+      caseId,
+      demoExpiry(),
+      keccak256(toHex(`integration-digital-identity:${caseId}`)),
+      SCHEMA_VERSION
+    ],
+    { account: issuer, ...free }
+  );
   const issueReceipt = await publicClient.waitForTransactionReceipt({ hash: issueHash });
   assert.equal(issueReceipt.status, "success");
   ok(`issueCredential mined in block ${issueReceipt.blockNumber}`);
@@ -162,7 +164,15 @@ async function main() {
     "fee cannot be paid again once the case is approved"
   );
   await expectRevert(
-    registry.write.issueCredential([caseId], { account: issuer, ...free }),
+    registry.write.issueCredential(
+      [
+        caseId,
+        demoExpiry(),
+        keccak256(toHex(`integration-digital-identity-duplicate:${caseId}`)),
+        SCHEMA_VERSION
+      ],
+      { account: issuer, ...free }
+    ),
     /CredentialAlreadyIssued/,
     "credential cannot be issued twice for the same case"
   );

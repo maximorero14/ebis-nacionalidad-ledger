@@ -7,8 +7,25 @@ import { PoliceCaseDetailPage } from "./PoliceCaseDetailPage";
 
 vi.mock("../../features/cases/api", () => ({
   getCase: vi.fn(),
-  getCaseTimeline: vi.fn(),
-  approvePolice: vi.fn()
+  getCaseTimeline: vi.fn()
+}));
+
+const idleAction = {
+  phase: "idle",
+  transactionHash: undefined,
+  blockNumber: undefined,
+  errorCode: undefined,
+  errorMessage: undefined,
+  submitError: null,
+  isTimedOut: false,
+  retryReconciliation: vi.fn(),
+  execute: vi.fn()
+};
+
+vi.mock("../../features/cases/useCaseWalletActions", () => ({
+  useApprovePoliceWithWallet: () => idleAction,
+  useRejectCaseWithWallet: () => idleAction,
+  useRequestRemediationWithWallet: () => idleAction
 }));
 
 import { getCase, getCaseTimeline } from "../../features/cases/api";
@@ -39,7 +56,7 @@ function renderPage() {
 }
 
 describe("PoliceCaseDetailPage", () => {
-  it("keeps the approve button disabled until both simulated checks are done", async () => {
+  it("keeps the approve button disabled until the simulated background check is done", async () => {
     vi.mocked(getCase).mockResolvedValue(CASE_IN_REVIEW);
     vi.mocked(getCaseTimeline).mockResolvedValue([]);
     const user = userEvent.setup();
@@ -52,21 +69,17 @@ describe("PoliceCaseDetailPage", () => {
     await user.click(
       screen.getByRole("button", { name: "Ejecutar validacion de antecedentes (simulada)" })
     );
-    expect(approveButton).toBeDisabled();
-
-    await user.click(
-      screen.getByRole("button", { name: "Registrar compromiso de edad (simulado)" })
-    );
     expect(approveButton).toBeEnabled();
   });
 
-  it("never renders the citizen's birthdate anywhere on the page", async () => {
+  it("does not render age verification controls", async () => {
     vi.mocked(getCase).mockResolvedValue(CASE_IN_REVIEW);
     vi.mocked(getCaseTimeline).mockResolvedValue([]);
 
     renderPage();
 
     await screen.findByRole("heading", { name: "Expediente #9" });
-    expect(screen.getByText(/fecha de nacimiento nunca se publica/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Registrar compromiso/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Compromiso registrado/i)).not.toBeInTheDocument();
   });
 });

@@ -2,26 +2,21 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "../../design-system/components/Card";
-import { Badge } from "../../design-system/components/Badge";
 import { Button } from "../../design-system/components/Button";
 import { TransactionProgress } from "../../features/transactions/TransactionProgress";
-import { useTransactionAction } from "../../features/transactions/useTransactionAction";
 import { ReasonCodeField } from "../../features/cases/ReasonCodeField";
 import { REJECTION_REASON_CODES, REMEDIATION_REASON_CODES } from "../../features/cases/reasonCodes";
 import { isApiError } from "../../api/errors";
+import { getCase, getCaseTimeline } from "../../features/cases/api";
 import {
-  approveForeignAffairs,
-  getCase,
-  getCaseTimeline,
-  rejectCase,
-  requestRemediation
-} from "../../features/cases/api";
-import {
-  CASE_STATUS_LABEL,
-  CASE_STATUS_TONE,
-  describeCaseEvent
-} from "../../features/cases/caseLabels";
+  useApproveForeignAffairsWithWallet,
+  useRejectCaseWithWallet,
+  useRequestRemediationWithWallet
+} from "../../features/cases/useCaseWalletActions";
+import { CASE_STATUS_LABEL } from "../../features/cases/caseLabels";
 import { canActOnReview, canForeignAffairsApprove } from "../../features/cases/caseTransitions";
+import { CaseSummaryPanel } from "./CaseSummaryPanel";
+import { CaseTimeline } from "./CaseTimeline";
 import styles from "./ForeignAffairsCaseDetailPage.module.css";
 
 const IN_FLIGHT_PHASES = new Set(["preparing", "submitting", "pending", "confirmed"]);
@@ -52,23 +47,10 @@ export function ForeignAffairsCaseDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ["case-list"] });
   }
 
-  const remediationAction = useTransactionAction(
-    `case-${caseId}-remediation`,
-    (idempotencyKey) => requestRemediation(caseId, remediationReason, idempotencyKey),
-    () => refreshCase()
-  );
-
-  const approveAction = useTransactionAction(
-    `case-${caseId}-foreign-affairs-approval`,
-    (idempotencyKey) => approveForeignAffairs(caseId, idempotencyKey),
-    () => refreshCase()
-  );
-
-  const rejectAction = useTransactionAction(
-    `case-${caseId}-reject`,
-    (idempotencyKey) => rejectCase(caseId, rejectReason, idempotencyKey),
-    () => refreshCase()
-  );
+  const reviewRound = caseQuery.data?.reviewRound ?? 0;
+  const remediationAction = useRequestRemediationWithWallet(caseId, remediationReason, refreshCase);
+  const approveAction = useApproveForeignAffairsWithWallet(caseId, reviewRound, refreshCase);
+  const rejectAction = useRejectCaseWithWallet(caseId, rejectReason, refreshCase);
 
   if (!isValidCaseId) {
     return (
@@ -106,12 +88,7 @@ export function ForeignAffairsCaseDetailPage() {
   return (
     <div className={styles["page"]}>
       <Card>
-        <h1>Expediente #{caseData.caseId}</h1>
-        <Badge tone={CASE_STATUS_TONE[caseData.status]}>{CASE_STATUS_LABEL[caseData.status]}</Badge>
-        <p>Ronda de revision: {caseData.reviewRound}</p>
-        <p>Tasa pagada: {caseData.feePaid ? "si" : "no"}</p>
-        <p>Aprobacion Extranjeria: {caseData.foreignAffairsApproved ? "si" : "no"}</p>
-        <p>Aprobacion Policia: {caseData.policeApproved ? "si" : "no"}</p>
+        <CaseSummaryPanel caseData={caseData} />
       </Card>
 
       <Card>
@@ -135,97 +112,89 @@ export function ForeignAffairsCaseDetailPage() {
           </p>
         ) : null}
 
-        <div className={styles["actionBlock"]}>
-          <h3>Solicitar subsanacion</h3>
-          <ReasonCodeField codes={REMEDIATION_REASON_CODES} onChange={setRemediationReason} />
-          <Button
-            variant="secondary"
-            disabled={
-              !canAct || IN_FLIGHT_PHASES.has(remediationAction.phase) || !remediationReason.trim()
-            }
-            onClick={() => {
-              void remediationAction.execute();
-            }}
-          >
-            Solicitar subsanacion
-          </Button>
-          <TransactionProgress
-            phase={remediationAction.phase}
-            transactionHash={remediationAction.transactionHash}
-            blockNumber={remediationAction.blockNumber}
-            errorCode={remediationAction.errorCode}
-            errorMessage={remediationAction.errorMessage}
-            submitError={remediationAction.submitError}
-            isTimedOut={remediationAction.isTimedOut}
-            onRetryReconciliation={remediationAction.retryReconciliation}
-          />
-        </div>
+        <div className={styles["actionGrid"]}>
+          <div className={styles["actionBlock"]}>
+            <h3>Solicitar subsanacion</h3>
+            <ReasonCodeField codes={REMEDIATION_REASON_CODES} onChange={setRemediationReason} />
+            <Button
+              variant="secondary"
+              disabled={
+                !canAct ||
+                IN_FLIGHT_PHASES.has(remediationAction.phase) ||
+                !remediationReason.trim()
+              }
+              onClick={() => {
+                void remediationAction.execute();
+              }}
+            >
+              Solicitar subsanacion
+            </Button>
+            <TransactionProgress
+              phase={remediationAction.phase}
+              transactionHash={remediationAction.transactionHash}
+              blockNumber={remediationAction.blockNumber}
+              errorCode={remediationAction.errorCode}
+              errorMessage={remediationAction.errorMessage}
+              submitError={remediationAction.submitError}
+              isTimedOut={remediationAction.isTimedOut}
+              onRetryReconciliation={remediationAction.retryReconciliation}
+            />
+          </div>
 
-        <div className={styles["actionBlock"]}>
-          <h3>Aprobacion administrativa</h3>
-          {!canApprove && canAct ? (
-            <p className={styles["hint"]}>Ya aprobado por Extranjeria.</p>
-          ) : null}
-          <Button
-            disabled={!canApprove || IN_FLIGHT_PHASES.has(approveAction.phase)}
-            onClick={() => {
-              void approveAction.execute();
-            }}
-          >
-            Aprobar
-          </Button>
-          <TransactionProgress
-            phase={approveAction.phase}
-            transactionHash={approveAction.transactionHash}
-            blockNumber={approveAction.blockNumber}
-            errorCode={approveAction.errorCode}
-            errorMessage={approveAction.errorMessage}
-            submitError={approveAction.submitError}
-            isTimedOut={approveAction.isTimedOut}
-            onRetryReconciliation={approveAction.retryReconciliation}
-          />
-        </div>
+          <div className={styles["actionBlock"]}>
+            <h3>Aprobacion administrativa</h3>
+            {!canApprove && canAct ? (
+              <p className={styles["hint"]}>Ya aprobado por Extranjeria.</p>
+            ) : null}
+            <Button
+              disabled={!canApprove || IN_FLIGHT_PHASES.has(approveAction.phase)}
+              onClick={() => {
+                void approveAction.execute();
+              }}
+            >
+              Aprobar
+            </Button>
+            <TransactionProgress
+              phase={approveAction.phase}
+              transactionHash={approveAction.transactionHash}
+              blockNumber={approveAction.blockNumber}
+              errorCode={approveAction.errorCode}
+              errorMessage={approveAction.errorMessage}
+              submitError={approveAction.submitError}
+              isTimedOut={approveAction.isTimedOut}
+              onRetryReconciliation={approveAction.retryReconciliation}
+            />
+          </div>
 
-        <div className={styles["actionBlock"]}>
-          <h3>Rechazar</h3>
-          <ReasonCodeField codes={REJECTION_REASON_CODES} onChange={setRejectReason} />
-          <Button
-            variant="danger"
-            disabled={!canAct || IN_FLIGHT_PHASES.has(rejectAction.phase) || !rejectReason.trim()}
-            onClick={() => {
-              void rejectAction.execute();
-            }}
-          >
-            Rechazar expediente
-          </Button>
-          <TransactionProgress
-            phase={rejectAction.phase}
-            transactionHash={rejectAction.transactionHash}
-            blockNumber={rejectAction.blockNumber}
-            errorCode={rejectAction.errorCode}
-            errorMessage={rejectAction.errorMessage}
-            submitError={rejectAction.submitError}
-            isTimedOut={rejectAction.isTimedOut}
-            onRetryReconciliation={rejectAction.retryReconciliation}
-          />
+          <div className={styles["actionBlock"]}>
+            <h3>Rechazar</h3>
+            <ReasonCodeField codes={REJECTION_REASON_CODES} onChange={setRejectReason} />
+            <Button
+              variant="danger"
+              disabled={!canAct || IN_FLIGHT_PHASES.has(rejectAction.phase) || !rejectReason.trim()}
+              onClick={() => {
+                void rejectAction.execute();
+              }}
+            >
+              Rechazar expediente
+            </Button>
+            <TransactionProgress
+              phase={rejectAction.phase}
+              transactionHash={rejectAction.transactionHash}
+              blockNumber={rejectAction.blockNumber}
+              errorCode={rejectAction.errorCode}
+              errorMessage={rejectAction.errorMessage}
+              submitError={rejectAction.submitError}
+              isTimedOut={rejectAction.isTimedOut}
+              onRetryReconciliation={rejectAction.retryReconciliation}
+            />
+          </div>
         </div>
       </Card>
 
       <Card>
-        <h2>Timeline auditable</h2>
         {timelineQuery.isPending ? <p>Consultando timeline...</p> : null}
-        {timelineQuery.data ? (
-          <ol className={styles["timeline"]}>
-            {timelineQuery.data.map((event) => (
-              <li key={`${event.transactionHash}-${event.eventName}`}>
-                <span>{describeCaseEvent(event)}</span>
-                <span className={styles["timelineMeta"]}>
-                  bloque {event.blockNumber} · <code>{event.transactionHash}</code>
-                </span>
-              </li>
-            ))}
-          </ol>
-        ) : null}
+        {timelineQuery.data ? <CaseTimeline events={timelineQuery.data} /> : null}
       </Card>
     </div>
   );

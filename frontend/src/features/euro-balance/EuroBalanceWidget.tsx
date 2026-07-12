@@ -1,19 +1,21 @@
 import { useEuroBalance } from "./useEuroBalance";
+import styles from "./EuroBalanceWidget.module.css";
 
 export function EuroBalanceWidget({ evmAddress }: { evmAddress: string }) {
   const { data, isPending, isError } = useEuroBalance(evmAddress);
 
   if (isPending) {
-    return <p>Consultando saldo de Euro Digital demo...</p>;
+    return <p className={styles["pending"]}>Consultando saldo dEUR...</p>;
   }
 
   if (isError || data === undefined) {
-    return <p>No se pudo leer el saldo on-chain.</p>;
+    return <p className={styles["error"]}>No se pudo leer el saldo on-chain.</p>;
   }
 
   return (
-    <p>
-      Saldo Euro Digital demo: <strong>{data.toFixed(2)} EURD</strong>
-    </p>
+    <div className={styles["balance"]}>
+      <span className={styles["label"]}>Euro Digital demo</span>
+      <strong className={styles["value"]}>{data.toFixed(2)} dEUR</strong>
+    </div>
   );
 }
