@@ -102,6 +102,7 @@ public class SecurityConfig {
                                         .permitAll()
                                         .requestMatchers(
                                                 "/network/status",
+                                                "/contracts",
                                                 "/actuator/**",
                                                 "/v3/api-docs/**",
                                                 "/swagger-ui/**",

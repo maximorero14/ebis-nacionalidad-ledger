@@ -12,6 +12,7 @@ import com.ebis.nacionalidad.domain.model.ApplicationRole;
 import com.ebis.nacionalidad.domain.model.CaseStatus;
 import com.ebis.nacionalidad.domain.model.OnChainCase;
 import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
+import com.ebis.nacionalidad.infrastructure.blockchain.ContractsManifest;
 import java.math.BigInteger;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,7 @@ class SecurityIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @MockitoBean private NationalityLedgerClient nationalityLedgerClient;
+    @MockitoBean private ContractsManifest contractsManifest;
 
     @BeforeEach
     void seedCases() {
@@ -59,6 +61,8 @@ class SecurityIntegrationTest {
         when(nationalityLedgerClient.readCase(OTHERS_CASE_ID))
                 .thenReturn(Optional.of(onChainCase(OTHERS_CASE_ID, OTHER_OWNER_ADDRESS)));
         when(nationalityLedgerClient.readCase(999_999L)).thenReturn(Optional.empty());
+        when(contractsManifest.chainId()).thenReturn(20260711L);
+        when(contractsManifest.tokenAddress()).thenReturn("0xTOKEN");
     }
 
     private OnChainCase onChainCase(long caseId, String owner) {
@@ -128,6 +132,15 @@ class SecurityIntegrationTest {
     @Test
     void unknownCaseIsNotFoundEvenForAnInstitutionalActor() throws Exception {
         mockMvc.perform(get("/cases/{caseId}", 999_999L).with(policeJwt())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void anyoneCanReadContractAddressesWithoutAToken() throws Exception {
+        mockMvc
+                .perform(get("/contracts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.chainId", is(20260711)))
+                .andExpect(jsonPath("$.tokenAddress", is("0xTOKEN")));
     }
 
     private org.springframework.test.web.servlet.request.RequestPostProcessor citizenJwt() {

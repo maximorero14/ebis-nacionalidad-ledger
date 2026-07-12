@@ -11,6 +11,7 @@ import com.ebis.nacionalidad.domain.port.IdempotencyPort;
 import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
 import com.ebis.nacionalidad.domain.port.ProjectionCursorPort;
 import com.ebis.nacionalidad.domain.port.TransactionTrackingPort;
+import com.ebis.nacionalidad.infrastructure.blockchain.ContractsManifest;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.Optional;
@@ -45,6 +46,7 @@ class PersistenceAdaptersIntegrationTest {
     // Every adapter under test here only needs a real Postgres; the ledger port is
     // mocked exactly like BackendApplicationTests/SecurityIntegrationTest.
     @MockitoBean private NationalityLedgerClient nationalityLedgerClient;
+    @MockitoBean private ContractsManifest contractsManifest;
 
     @Test
     void trackedTransactionRoundTripsThroughRealPostgres() {

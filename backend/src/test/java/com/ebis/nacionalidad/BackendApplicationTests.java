@@ -1,6 +1,7 @@
 package com.ebis.nacionalidad;
 
 import com.ebis.nacionalidad.domain.port.NationalityLedgerClient;
+import com.ebis.nacionalidad.infrastructure.blockchain.ContractsManifest;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -22,6 +23,7 @@ class BackendApplicationTests {
     // controller that needs the ledger port gets a mock instead (see SecurityIntegrationTest
     // for one that actually stubs behaviour).
     @MockitoBean private NationalityLedgerClient nationalityLedgerClient;
+    @MockitoBean private ContractsManifest contractsManifest;
 
     @Test
     void contextLoadsAndFlywayMigrationsApply() {

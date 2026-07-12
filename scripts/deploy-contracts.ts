@@ -211,6 +211,17 @@ async function main() {
     issuer
   );
 
+  // faucetEnabled defaults to false (Solidity default) and nothing else ever flips it:
+  // found live in M7.2 (frontend faucet claim reverting with FaucetDisabled on every
+  // deployment so far). Admin still holds FAUCET_ROLE at this point in the script.
+  const enableFaucetHash = await token.write.setFaucetEnabled([true]);
+  const enableFaucetReceipt = await publicClient.waitForTransactionReceipt({
+    hash: enableFaucetHash
+  });
+  console.log(
+    `Enabled DigitalEuroDemo faucet (tx ${enableFaucetHash}, block ${enableFaucetReceipt.blockNumber})`
+  );
+
   // The bootstrap admin only needs DEFAULT_ADMIN_ROLE going forward (M4.6 finding H2):
   // revoke every operational role it only held to bootstrap the real functional accounts.
   await revokeRole(

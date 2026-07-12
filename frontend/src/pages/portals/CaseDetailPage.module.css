@@ -1,0 +1,38 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.privacyNote {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  background: var(--color-neutral-bg);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.form {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: var(--space-4);
+}
+
+.timelineMeta {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  word-break: break-all;
+}

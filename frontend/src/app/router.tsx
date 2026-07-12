@@ -6,6 +6,7 @@ import { HomeRedirect } from "../pages/HomeRedirect";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ForbiddenPage } from "../pages/ForbiddenPage";
 import { CitizenPortalPage } from "../pages/portals/CitizenPortalPage";
+import { CaseDetailPage } from "../pages/portals/CaseDetailPage";
 import { ForeignAffairsPortalPage } from "../pages/portals/ForeignAffairsPortalPage";
 import { PolicePortalPage } from "../pages/portals/PolicePortalPage";
 import { VerifierPortalPage } from "../pages/portals/VerifierPortalPage";
@@ -22,7 +23,10 @@ export const router = createBrowserRouter([
       { path: "prohibido", element: <ForbiddenPage /> },
       {
         element: <ProtectedRoute allowedRoles={["CITIZEN"]} />,
-        children: [{ path: "ciudadano", element: <CitizenPortalPage /> }]
+        children: [
+          { path: "ciudadano", element: <CitizenPortalPage /> },
+          { path: "ciudadano/expedientes/:caseId", element: <CaseDetailPage /> }
+        ]
       },
       {
         element: <ProtectedRoute allowedRoles={["FOREIGN_AFFAIRS"]} />,
