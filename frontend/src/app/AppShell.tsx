@@ -2,6 +2,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { Button } from "../design-system/components/Button";
+import { EuroBalanceWidget } from "../features/euro-balance/EuroBalanceWidget";
 import { useWalletCapabilities } from "../wallet/useWalletCapabilities";
 import styles from "./AppShell.module.css";
 
@@ -31,6 +32,7 @@ export function AppShell() {
           {capabilities.canReviewPolice ? <Link to="/policia">Policia</Link> : null}
           {capabilities.canIssueCredential ? <Link to="/emisor">Emisor</Link> : null}
           {capabilities.isTokenAdmin ? <Link to="/admin">Admin</Link> : null}
+          {session ? <EuroBalanceWidget evmAddress={session.address} variant="chip" /> : null}
           <ConnectButton />
           {session ? (
             <Button variant="secondary" onClick={logout}>

@@ -7,6 +7,7 @@ import { Button } from "../../design-system/components/Button";
 import { TextField } from "../../design-system/components/TextField";
 import { useCredential } from "../../features/credentials/useCredential";
 import { DigitalIdentityCard } from "../../features/credentials/DigitalIdentityCard";
+import { DigitalIdentityCardBack } from "../../features/credentials/DigitalIdentityCardBack";
 import { useContracts } from "../../features/contracts/useContracts";
 import { isApiError } from "../../api/errors";
 import styles from "./VerifierPortalPage.module.css";
@@ -104,82 +105,19 @@ export function VerifierPortalPage() {
           ) : null}
 
           {credential.data ? (
-            <>
+            <div className={styles["cardFaces"]}>
               <DigitalIdentityCard
                 credential={credential.data}
                 isValid={isValid}
                 accessMode={accessMode}
               />
-
-              <section className={styles["technical"]} aria-label="Parte trasera del DNI digital">
-                <div className={styles["backWatermark"]} aria-hidden="true">
-                  ESP
-                </div>
-                <div className={styles["technicalHeader"]}>
-                  <div>
-                    <p className={styles["eyebrow"]}>Parte trasera</p>
-                    <h2>Evidencia tecnica</h2>
-                  </div>
-                  <span
-                    className={`${styles["statusPill"]} ${
-                      isValid ? styles["success"] : styles["danger"]
-                    }`}
-                  >
-                    {isValid ? "Vigente" : "No vigente"}
-                  </span>
-                </div>
-
-                <dl className={styles["evidenceGrid"]}>
-                  <div>
-                    <dt>Token</dt>
-                    <dd>#{credential.data.tokenId}</dd>
-                  </div>
-                  <div>
-                    <dt>Chain ID</dt>
-                    <dd>{contracts.data?.chainId ?? "Consultando"}</dd>
-                  </div>
-                  <div>
-                    <dt>Contrato de credenciales</dt>
-                    <dd>
-                      <code>{contracts.data?.credentialAddress ?? "consultando..."}</code>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Titular EVM</dt>
-                    <dd>
-                      <code>{credential.data.holderAddress}</code>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Compromiso de datos</dt>
-                    <dd>
-                      <code>{credential.data.dataCommitment ?? "No informado"}</code>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Versiones</dt>
-                    <dd>
-                      Datos v{credential.data.dataVersion ?? 1} / Esquema v
-                      {credential.data.schemaVersion ?? 1}
-                    </dd>
-                  </div>
-                  {credential.data.revoked && credential.data.revocationReasonCode ? (
-                    <div>
-                      <dt>Codigo de revocacion</dt>
-                      <dd>
-                        <code>{credential.data.revocationReasonCode}</code>
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-
-                <p className={styles["technicalNote"]}>
-                  Esta vista confirma estado, contrato y compromiso de datos sin abrir informacion
-                  personal adicional. La cadena guarda pruebas y estados; los datos personales
-                  permanecen fuera de la blockchain.
-                </p>
-              </section>
-            </>
+              <DigitalIdentityCardBack
+                credential={credential.data}
+                isValid={isValid}
+                chainId={contracts.data?.chainId}
+                credentialAddress={contracts.data?.credentialAddress}
+              />
+            </div>
           ) : null}
         </Card>
       ) : null}

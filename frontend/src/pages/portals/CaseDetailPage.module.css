@@ -20,22 +20,6 @@
   font-size: var(--font-size-sm);
 }
 
-.splitGrid,
-.singleGrid {
-  display: grid;
-  gap: var(--space-6);
-}
-
-.splitGrid {
-  grid-template-columns: minmax(0, 0.9fr) minmax(18rem, 1.1fr);
-  align-items: stretch;
-}
-
-.splitGrid > *,
-.singleGrid > * {
-  min-width: 0;
-}
-
 .form {
   display: flex;
   align-items: flex-end;
@@ -54,8 +38,3 @@
   }
 }
 
-@media (max-width: 820px) {
-  .splitGrid {
-    grid-template-columns: 1fr;
-  }
-}

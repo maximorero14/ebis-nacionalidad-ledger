@@ -5,7 +5,6 @@ import { Card } from "../../design-system/components/Card";
 import { Button } from "../../design-system/components/Button";
 import { TextField } from "../../design-system/components/TextField";
 import { TransactionProgress } from "../../features/transactions/TransactionProgress";
-import { EuroBalanceWidget } from "../../features/euro-balance/EuroBalanceWidget";
 import { DigitalIdentityCredentialCard } from "../../features/credentials/DigitalIdentityCard";
 import { isApiError } from "../../api/errors";
 import { getCase, getCaseTimeline } from "../../features/cases/api";
@@ -172,35 +171,29 @@ export function CaseDetailPage() {
         </Card>
       ) : null}
 
-      <div className={canPayFee ? styles["splitGrid"] : styles["singleGrid"]}>
+      {canPayFee ? (
         <Card>
-          <EuroBalanceWidget evmAddress={caseData.ownerAddress} />
+          <h2>Pago de tasa</h2>
+          <Button
+            onClick={() => {
+              void feeAction.execute();
+            }}
+            disabled={IN_FLIGHT_PHASES.has(feeAction.phase)}
+          >
+            Pagar tasa
+          </Button>
+          <TransactionProgress
+            phase={feeAction.phase}
+            transactionHash={feeAction.transactionHash}
+            blockNumber={feeAction.blockNumber}
+            errorCode={feeAction.errorCode}
+            errorMessage={feeAction.errorMessage}
+            submitError={feeAction.submitError}
+            isTimedOut={feeAction.isTimedOut}
+            onRetryReconciliation={feeAction.retryReconciliation}
+          />
         </Card>
-
-        {canPayFee ? (
-          <Card>
-            <h2>Pago de tasa</h2>
-            <Button
-              onClick={() => {
-                void feeAction.execute();
-              }}
-              disabled={IN_FLIGHT_PHASES.has(feeAction.phase)}
-            >
-              Pagar tasa
-            </Button>
-            <TransactionProgress
-              phase={feeAction.phase}
-              transactionHash={feeAction.transactionHash}
-              blockNumber={feeAction.blockNumber}
-              errorCode={feeAction.errorCode}
-              errorMessage={feeAction.errorMessage}
-              submitError={feeAction.submitError}
-              isTimedOut={feeAction.isTimedOut}
-              onRetryReconciliation={feeAction.retryReconciliation}
-            />
-          </Card>
-        ) : null}
-      </div>
+      ) : null}
 
       {caseData.credentialTokenId > 0 ? (
         <Card>

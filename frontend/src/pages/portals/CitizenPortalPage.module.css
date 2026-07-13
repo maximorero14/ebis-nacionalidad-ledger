@@ -6,18 +6,32 @@
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 .eyebrow {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   color: var(--color-secondary);
   font-size: 0.74rem;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+}
+
+.sessionLine {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.sessionLine code {
+  color: var(--color-text);
+  font-weight: 700;
 }
 
 .hint {
@@ -90,10 +104,6 @@
 }
 
 @media (max-width: 640px) {
-  .hero {
-    grid-template-columns: 1fr;
-  }
-
   .listItem,
   .addForm {
     align-items: flex-start;

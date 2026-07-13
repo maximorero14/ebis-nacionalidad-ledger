@@ -1,78 +1,79 @@
 # ebis-nacionalidad-ledger
-ebis-nacionalidad-ledger es una aplicación demostrativa para gestionar un expediente simplificado de solicitud de nacionalidad sobre una red blockchain permissionada.
 
-## Arranque local con Docker Compose
+Demo de un trámite de nacionalidad de extranjería llevado a una blockchain permissionada: el expediente, sus aprobaciones y el DNI digital final quedan registrados on-chain, en vez de vivir solo en una base de datos administrativa.
 
-Para levantar solo la aplicacion desde la raiz del repositorio:
+## El negocio
+
+El sistema modela el circuito real de una solicitud de nacionalidad:
+
+1. **El ciudadano** abre un expediente y sube la evidencia documental (como huella/hash, sin subir el documento en claro a la cadena).
+2. **Paga la tasa** del trámite con un euro digital de demostración (dEUR).
+3. **Extranjería y Policía** aprueban el expediente de forma independiente — hacen falta las dos aprobaciones, y cualquiera de las dos puede pedir subsanación o rechazar.
+4. Una vez aprobado por ambas partes, un **Emisor** acuñado emite el **DNI digital**: una credencial no transferible ("soulbound") atada para siempre a la wallet del ciudadano.
+5. Cualquiera puede **verificar** ese DNI públicamente (portal verificador, sin login) y comprobar si sigue vigente. Un **Revocador** puede invalidarlo permanentemente si corresponde (documento robado, fraude, etc.) — la revocación no borra el historial, solo marca el DNI como no válido para siempre.
+
+Todo el negocio se apoya en roles separados (ciudadano, extranjería, policía, emisor, revocador, tesorería) para que ningún actor pueda emitir, aprobar y validar su propio trámite.
+
+## Tecnología
+
+- **Blockchain**: Hyperledger Besu (QBFT, red privada de 4 validadores + nodo RPC), desplegada vía Docker Compose. Contratos en Solidity 0.8.31 con OpenZeppelin 5.0.2, compilados y testeados con Hardhat 3 + viem.
+- **Explorador**: Blockscout local para inspeccionar bloques, transacciones y contratos de la red.
+- **Backend**: Spring Boot 4 (Java) + Web3j como cliente de blockchain, PostgreSQL con migraciones Flyway, expone una API REST documentada con springdoc/OpenAPI.
+- **Frontend**: React 19 + TypeScript + Vite, TanStack Query para datos, wagmi/viem/RainbowKit para la conexión de wallet (MetaMask), CSS Modules para estilos.
+- **Orquestación**: Docker Compose + `Makefile` con targets (`make up`, `make demo-simple`, `make demo-complete`) que levantan red, contratos, API y frontend en un solo paso.
+
+## Smart contracts
+
+### `NationalityCredential.sol` — el DNI digital
+ERC-721 real (hereda de OpenZeppelin) pero **soulbound**: toda transferencia, `approve` o `setApprovalForAll` revierte, el token queda pegado a la wallet que lo recibió. No guarda datos personales, solo un hash (`dataCommitment`) de los datos reales.
+
+- `mintForCase(caseId, holder, expiresAt, dataCommitment, schemaVersion)` — emite el DNI (rol `CREDENTIAL_ISSUER_ROLE`). El `tokenId` es el mismo número que el `caseId`.
+- `renew(...)` — incrementa `dataVersion`, actualiza caducidad y compromiso de datos.
+- `revoke(tokenId, reasonCode)` — invalida el DNI de forma permanente (rol `REVOKER_ROLE`). No hay función inversa.
+- `isValid(tokenId)` / `statusOf(tokenId)` — vigente, caducado, revocado o inexistente.
+- `ownerOf`, `balanceOf`, `tokenURI`, `credentialData` — lectura estándar ERC-721 + datos propios del expediente.
+
+### `NationalityCaseRegistry.sol` — el expediente
+Orquesta el ciclo de vida completo de la solicitud y es el único autorizado a mintear en `NationalityCredential`.
+
+- `createCase()` — el ciudadano abre su expediente (uno activo por wallet).
+- `submitDocuments(caseId, documentCommitment)` — adjunta el hash de la documentación.
+- `payFee(caseId)` — cobra la tasa en dEUR vía `transferFrom`/allowance.
+- `approveForeignAffairs(caseId, round)` / `approvePolice(caseId, round)` — aprobaciones institucionales independientes.
+- `requestRemediation(caseId, reasonCode)` / `rejectCase(caseId, reasonCode)` — devuelve a subsanación o rechaza.
+- `issueCredential(...)` / `renewCredential(...)` — dispara el mint/renovación en el contrato de credencial una vez `APPROVED`.
+- `getCase`, `currentRound`, `activeCaseOf`, `approvedCaseOf`, `canCreateCase` — lecturas de estado.
+
+### `DigitalEuroDemo.sol` — el euro digital de demo
+ERC-20 simple (`dEUR`, 2 decimales) usado solo para pagar la tasa del trámite. No representa dinero real.
+
+- `mint(to, amount)` — acuñación administrativa (`DEFAULT_ADMIN_ROLE`).
+- `claimFaucet()` / `setFaucetEnabled(bool)` — grifo de saldo de demo, una vez por cuenta.
+- `collectFeeFrom(payer, amount, paymentReference)` — cobra la tasa y la transfiere a tesorería (`FEE_COLLECTOR_ROLE`).
+
+## Métricas y observabilidad
+
+Stack completo levantado por Docker Compose, solo accesible en loopback:
+
+| Herramienta | URL local | Qué hace |
+|---|---|---|
+| Prometheus | `localhost:9090` | scrapea métricas de la API (`/actuator/prometheus`) y de los nodos Besu (`:9545/metrics`) |
+| Grafana | `localhost:3002` | dashboard `EBIS Observabilidad Local` provisionado como código |
+| Loki + Promtail | `localhost:3100` | agregación de logs de todos los contenedores |
+| Tempo | `localhost:3200` | trazas distribuidas OTLP de la API |
+| OpenTelemetry Collector | `localhost:4317`/`4318` | recibe trazas/métricas OTLP y las reenvía a Prometheus/Tempo |
+| Blockscout | `localhost:4000` | explorador de la red Besu (bloques, txs, contratos, eventos) |
+
+Métricas clave monitorizadas: altura de bloque y peers por nodo Besu (`ethereum_blockchain_height`, `ethereum_peer_count`), actividad de cadena (`besu_blockchain_chain_head_transaction_count_counter_total`), y latencia/volumen HTTP de la API (`http_server_requests_seconds_*`).
+
+Limitaciones conocidas: no hay Alertmanager ni reglas de alerta configuradas; el panel de latencia usa promedio (Spring Boot no expone buckets de histograma para p95).
+
+## Arranque local
 
 ```bash
-make up
+make up              # red Besu + contratos + API + frontend
+make demo-simple     # + wallets/roles listos para MetaMask
+make demo-complete   # + expedientes y credenciales de ejemplo precargados
 ```
 
-Ese comando limpia volumenes y datos generados de sesiones anteriores, regenera la red Besu QBFT, despliega los contratos base, levanta la API Spring Boot y sirve el frontend en:
-
-```text
-http://localhost:5173
-```
-
-Para una demo con wallets derivadas y roles cargados:
-
-```bash
-make demo-simple
-```
-
-`demo-simple` reutiliza `make up`, verifica el despliegue y muestra la tabla de wallets/roles para MetaMask.
-
-Si Docker Desktop falla durante `exporting to image` con un error similar a
-`failed to prepare extraction snapshot ... parent snapshot ... does not exist`, suele ser una
-inconsistencia de BuildKit/snapshotter local. Ejecuta:
-
-```bash
-make demo-simple-clean-build
-```
-
-Si el error persiste, reinicia Docker Desktop y repite el comando. Como ultima limpieza local
-sin borrar volumenes globales, puedes usar `docker system prune -f` y volver a lanzar
-`make demo-simple`.
-
-Para una demo completa con wallets, roles y expedientes precargados:
-
-```bash
-make demo-complete
-```
-
-`demo-complete` reutiliza `make demo-simple` y luego ejecuta el seed de expedientes y credenciales demo.
-
-Endpoints utiles:
-
-- API: `http://localhost:8080`
-- Health backend: `http://localhost:8080/actuator/health`
-- Besu RPC local: `http://localhost:8545`
-- Blockscout explorer: `http://localhost:4000`
-- Blockscout API: `http://localhost:4001`
-
-Las direcciones de contratos que usa la aplicacion siguen saliendo de
-`generated/deployments/besuLocal.json` y del endpoint `GET /contracts`. Blockscout es
-el explorador local para inspeccionar bloques, transacciones, addresses, contratos y
-eventos de la red Besu.
-
-Tambien puedes usar:
-
-```bash
-make demo-wallets
-make logs
-make down
-```
-
-Wallets demo:
-
-Importa en MetaMask la seed `DEMO_WALLET_MNEMONIC` de `.env` y cambia entre las cuentas derivadas:
-
-- cuenta 0: admin RBAC / deployer
-- cuenta 1: tesoreria
-- cuenta 2: ciudadano
-- cuenta 3: extranjeria / justicia
-- cuenta 4: policia
-- cuenta 5: emisor credencial
-- cuenta 6: revocador credencial
-- cuenta 7: operador dEUR
+Frontend en `http://localhost:5173`, API en `http://localhost:8080`. Importa en MetaMask la seed `DEMO_WALLET_MNEMONIC` de `.env` para operar con las cuentas demo (ciudadano, extranjería, policía, emisor, revocador, tesorería).

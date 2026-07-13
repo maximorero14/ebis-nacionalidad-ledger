@@ -126,18 +126,50 @@ async function main() {
 
   const results = {};
 
-  // --- Case 1: happy path, approved and credentialed --------------------------
+  // --- Case 1: the citizen's first application is rejected outright -----------
+  const happyFirstCaseId = await createFundedCase(context, "happy-first-attempt", seedCitizens.happy);
+  await mineWrite(
+    publicClient,
+    registry.write.rejectCase([happyFirstCaseId, REJECTION_REASON], {
+      account: context.police,
+      ...context.free
+    })
+  );
+  console.log(`[happy-first-attempt] case #${happyFirstCaseId} rejected`);
+  results.happyFirstAttempt = {
+    caseId: happyFirstCaseId.toString(),
+    owner: seedCitizens.happy.address,
+    status: "REJECTED"
+  };
+
+  // --- Case 2: the citizen tries again, is asked for a document, then approved -
   const happyCaseId = await createFundedCase(context, "happy", seedCitizens.happy);
   await mineWrite(
     publicClient,
-    registry.write.approveForeignAffairs([happyCaseId, 0n], {
+    registry.write.requestRemediation([happyCaseId, REMEDIATION_REASON], {
+      account: context.foreignAffairs,
+      ...context.free
+    })
+  );
+  console.log(`[happy] case #${happyCaseId} sent back to REMEDIATION_REQUIRED`);
+  await mineWrite(
+    publicClient,
+    registry.write.submitDocuments([happyCaseId, documentCommitment("happy:remediated")], {
+      account: seedCitizens.happy,
+      ...context.free
+    })
+  );
+  console.log(`[happy] case #${happyCaseId} resubmitted documents, back in IN_REVIEW`);
+  await mineWrite(
+    publicClient,
+    registry.write.approveForeignAffairs([happyCaseId, 1n], {
       account: context.foreignAffairs,
       ...context.free
     })
   );
   await mineWrite(
     publicClient,
-    registry.write.approvePolice([happyCaseId, 0n], { account: context.police, ...context.free })
+    registry.write.approvePolice([happyCaseId, 1n], { account: context.police, ...context.free })
   );
   const { receipt: issueReceipt } = await mineWrite(
     publicClient,
@@ -146,7 +178,7 @@ async function main() {
       { account: context.issuer, ...context.free }
     )
   );
-  console.log(`[happy] case #${happyCaseId} approved and credential issued`);
+  console.log(`[happy] case #${happyCaseId} approved on re-review and credential issued`);
   results.happy = {
     caseId: happyCaseId.toString(),
     owner: seedCitizens.happy.address,

@@ -6,7 +6,6 @@ import { Card } from "../../design-system/components/Card";
 import { Button } from "../../design-system/components/Button";
 import { Badge } from "../../design-system/components/Badge";
 import { TransactionProgress } from "../../features/transactions/TransactionProgress";
-import { EuroBalanceWidget } from "../../features/euro-balance/EuroBalanceWidget";
 import { useCasesSummary } from "../../features/cases/useCasesSummary";
 import { MY_CASES_QUERY_KEY, useMyCases } from "../../features/cases/useMyCases";
 import {
@@ -22,7 +21,6 @@ const TERMINAL_STATUSES = new Set(["APPROVED", "REJECTED"]);
 
 export function CitizenPortalPage() {
   const { session } = useAuth();
-  const evmAddress = session?.address ?? "";
   const queryClient = useQueryClient();
   const myCases = useMyCases();
   const creationEligibility = useCaseCreationEligibility();
@@ -68,16 +66,13 @@ export function CitizenPortalPage() {
   return (
     <div className={styles["page"]}>
       <Card className={styles["hero"]}>
-        <div>
-          <p className={styles["eyebrow"]}>Tramite ciudadano</p>
-          <h1>Portal ciudadano</h1>
-          {session ? (
-            <p>
-              Sesion activa: <code>{session.address}</code>
-            </p>
-          ) : null}
-        </div>
-        <EuroBalanceWidget evmAddress={evmAddress} />
+        <p className={styles["eyebrow"]}>Tramite ciudadano</p>
+        <h1>Portal ciudadano</h1>
+        {session ? (
+          <p className={styles["sessionLine"]}>
+            Sesion activa: <code>{session.address}</code>
+          </p>
+        ) : null}
       </Card>
 
       <Card>

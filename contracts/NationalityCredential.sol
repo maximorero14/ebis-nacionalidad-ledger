@@ -2,9 +2,10 @@
 pragma solidity 0.8.31;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {INationalityCredential} from "./interfaces/INationalityCredential.sol";
 
-contract NationalityCredential is AccessControl, INationalityCredential {
+contract NationalityCredential is ERC721, AccessControl, INationalityCredential {
     enum CredentialStatus {
         NONE,
         ACTIVE,
@@ -27,14 +28,10 @@ contract NationalityCredential is AccessControl, INationalityCredential {
     bytes32 public constant CREDENTIAL_ISSUER_ROLE = keccak256("CREDENTIAL_ISSUER_ROLE");
     bytes32 public constant REVOKER_ROLE = keccak256("REVOKER_ROLE");
 
-    string public constant name = "Demo Nationality Credential";
-    string public constant symbol = "DNC";
     uint64 public constant MAX_VALIDITY_SECONDS = 10 * 365 days;
 
     mapping(uint256 tokenId => CredentialData data) private credentials;
     mapping(uint256 caseId => uint256 tokenId) public tokenByCase;
-    mapping(uint256 tokenId => address owner) private owners;
-    mapping(address owner => uint256 balance) private balances;
 
     error Unauthorized(address actor, bytes32 role);
     error ZeroAddress();
@@ -67,9 +64,8 @@ contract NationalityCredential is AccessControl, INationalityCredential {
         bytes32 dataCommitment
     );
     event CredentialRevoked(uint256 indexed tokenId, address indexed actor, bytes32 reasonCode);
-    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
 
-    constructor(address admin) {
+    constructor(address admin) ERC721("Demo Nationality Credential", "DNC") {
         if (admin == address(0)) {
             revert ZeroAddress();
         }
@@ -98,7 +94,7 @@ contract NationalityCredential is AccessControl, INationalityCredential {
         _requireSchemaVersion(schemaVersion);
 
         tokenId = caseId;
-        if (owners[tokenId] != address(0) || tokenByCase[caseId] != 0) {
+        if (_ownerOf(tokenId) != address(0) || tokenByCase[caseId] != 0) {
             revert CredentialAlreadyIssued(caseId, tokenId);
         }
 
@@ -117,11 +113,7 @@ contract NationalityCredential is AccessControl, INationalityCredential {
             dataCommitment: dataCommitment
         });
 
-        owners[tokenId] = holder;
-        unchecked {
-            balances[holder] += 1;
-        }
-        emit Transfer(address(0), holder, tokenId);
+        _safeMint(holder, tokenId);
         emit CredentialIssued(
             caseId,
             tokenId,
@@ -215,33 +207,29 @@ contract NationalityCredential is AccessControl, INationalityCredential {
         return data;
     }
 
-    function ownerOf(uint256 tokenId) external view returns (address) {
-        address owner = owners[tokenId];
+    function ownerOf(uint256 tokenId) public view override returns (address) {
+        address owner = _ownerOf(tokenId);
         if (owner == address(0)) {
             revert CredentialNotFound(tokenId);
         }
         return owner;
     }
 
-    function balanceOf(address holder) external view returns (uint256) {
+    function balanceOf(address holder) public view override returns (uint256) {
         if (holder == address(0)) {
             revert ZeroAddress();
         }
-        return balances[holder];
+        return super.balanceOf(holder);
     }
 
-    function getApproved(uint256 tokenId) external view returns (address) {
-        if (owners[tokenId] == address(0)) {
+    function getApproved(uint256 tokenId) public view override returns (address) {
+        if (_ownerOf(tokenId) == address(0)) {
             revert CredentialNotFound(tokenId);
         }
         return address(0);
     }
 
-    function isApprovedForAll(address, address) external pure returns (bool) {
-        return false;
-    }
-
-    function tokenURI(uint256 tokenId) public view returns (string memory) {
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
         CredentialData storage data = credentials[tokenId];
         if (data.holder == address(0)) {
             revert CredentialNotFound(tokenId);
@@ -290,33 +278,37 @@ contract NationalityCredential is AccessControl, INationalityCredential {
         /* solhint-enable quotes */
     }
 
-    function approve(address, uint256) public pure {
+    function approve(address, uint256) public pure override {
         revert SoulboundTransferBlocked();
     }
 
-    function setApprovalForAll(address, bool) public pure {
+    function setApprovalForAll(address, bool) public pure override {
         revert SoulboundTransferBlocked();
     }
 
-    function transferFrom(address, address, uint256) public pure {
+    function transferFrom(address, address, uint256) public pure override {
         revert SoulboundTransferBlocked();
     }
 
-    function safeTransferFrom(address, address, uint256) public pure {
-        revert SoulboundTransferBlocked();
-    }
-
-    function safeTransferFrom(address, address, uint256, bytes memory) public pure {
+    function safeTransferFrom(address, address, uint256, bytes memory) public pure override {
         revert SoulboundTransferBlocked();
     }
 
     function supportsInterface(
         bytes4 interfaceId
-    ) public view override(AccessControl) returns (bool) {
-        return
-            interfaceId == 0x80ac58cd ||
-            interfaceId == 0x5b5e139f ||
-            super.supportsInterface(interfaceId);
+    ) public view override(ERC721, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    function _update(
+        address to,
+        uint256 tokenId,
+        address auth
+    ) internal override returns (address) {
+        if (_ownerOf(tokenId) != address(0)) {
+            revert SoulboundTransferBlocked();
+        }
+        return super._update(to, tokenId, auth);
     }
 
     function _requireRole(bytes32 role) private view {
