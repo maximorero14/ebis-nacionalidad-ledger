@@ -49,5 +49,5 @@ blockchain/besu/generated/
 *.log
 logs/
 
-# Evidence generated locally
-docs/evidencias/generated/
+# Internal docs (not published to the remote)
+docs/
