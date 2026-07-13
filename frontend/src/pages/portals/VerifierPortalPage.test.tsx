@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthContext, type AuthContextValue } from "../../auth/AuthContext";
 import { ApiError } from "../../api/errors";
 import { VerifierPortalPage } from "./VerifierPortalPage";
 
@@ -22,13 +22,36 @@ vi.mock("../../features/contracts/api", () => ({
 
 import { getCredential, getCredentialValidity } from "../../features/credentials/api";
 
-function renderPage(initialEntry: string) {
+const EMPTY_CAPABILITIES = {
+  isRegistryAdmin: false,
+  isTokenAdmin: false,
+  isCredentialAdmin: false,
+  canReviewForeignAffairs: false,
+  canReviewPolice: false,
+  canIssueCredential: false,
+  canRevokeCredential: false,
+  canMintDemoEuro: false,
+  canManageFaucet: false,
+  canCollectFees: false
+};
+
+const ANONYMOUS_SESSION: AuthContextValue = {
+  session: null,
+  isAuthenticated: false,
+  loginWithWallet: vi.fn(),
+  logout: vi.fn(),
+  isSigningIn: false
+};
+
+function renderPage(initialEntry: string, authContext: AuthContextValue = ANONYMOUS_SESSION) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <VerifierPortalPage />
-      </MemoryRouter>
+      <AuthContext.Provider value={authContext}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <VerifierPortalPage />
+        </MemoryRouter>
+      </AuthContext.Provider>
     </QueryClientProvider>
   );
 }
@@ -48,7 +71,7 @@ describe("VerifierPortalPage", () => {
     expect(await screen.findByText("Inexistente")).toBeInTheDocument();
   });
 
-  it("shows Activa for a valid, non-revoked credential", async () => {
+  it("shows Vigente for a valid, non-revoked credential", async () => {
     vi.mocked(getCredential).mockResolvedValue({
       tokenId: 11,
       caseId: 11,
@@ -61,10 +84,10 @@ describe("VerifierPortalPage", () => {
 
     renderPage("/verificador?id=11");
 
-    expect(await screen.findByText("Activa")).toBeInTheDocument();
+    expect(await screen.findAllByText("Vigente")).toHaveLength(2);
   });
 
-  it("shows Revocada for a revoked credential", async () => {
+  it("shows Revocado for a revoked credential", async () => {
     vi.mocked(getCredential).mockResolvedValue({
       tokenId: 11,
       caseId: 11,
@@ -77,10 +100,10 @@ describe("VerifierPortalPage", () => {
 
     renderPage("/verificador?id=11");
 
-    expect(await screen.findByText("Revocada")).toBeInTheDocument();
+    expect(await screen.findByText("Revocado")).toBeInTheDocument();
   });
 
-  it("hides the holder address until technical evidence is explicitly expanded", async () => {
+  it("always shows technical evidence in the verification result", async () => {
     vi.mocked(getCredential).mockResolvedValue({
       tokenId: 11,
       caseId: 11,
@@ -90,17 +113,70 @@ describe("VerifierPortalPage", () => {
       tokenUri: "data:application/json,{}"
     });
     vi.mocked(getCredentialValidity).mockResolvedValue({ valid: true });
-    const user = userEvent.setup();
 
     renderPage("/verificador?id=11");
-    await screen.findByText("Activa");
+    await screen.findAllByText("Vigente");
 
-    expect(
-      screen.queryByText(/0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc/)
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Mostrar evidencia tecnica/ }));
-
+    expect(screen.getByText("Evidencia tecnica")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /evidencia tecnica/ })).not.toBeInTheDocument();
     expect(screen.getByText(/0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc/)).toBeInTheDocument();
+  });
+
+  it("shows the full DNI when the connected wallet owns the credential", async () => {
+    const holderAddress = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc";
+    vi.mocked(getCredential).mockResolvedValue({
+      tokenId: 11,
+      caseId: 11,
+      holderAddress,
+      revoked: false,
+      revocationReasonCode: null,
+      tokenUri: "data:application/json,{}"
+    });
+    vi.mocked(getCredentialValidity).mockResolvedValue({ valid: true });
+
+    renderPage("/verificador?id=11", {
+      ...ANONYMOUS_SESSION,
+      session: {
+        accessToken: "token",
+        address: holderAddress,
+        chainId: 20260711,
+        capabilities: EMPTY_CAPABILITIES,
+        expiresAt: "2099-01-01T00:00:00.000Z"
+      },
+      isAuthenticated: true
+    });
+
+    expect(await screen.findByText("DNI-000011-4")).toBeInTheDocument();
+    expect(screen.queryByText("Datos protegidos")).not.toBeInTheDocument();
+  });
+
+  it("shows the police DNI view for a connected police wallet", async () => {
+    vi.mocked(getCredential).mockResolvedValue({
+      tokenId: 11,
+      caseId: 11,
+      holderAddress: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      revoked: false,
+      revocationReasonCode: null,
+      tokenUri: "data:application/json,{}"
+    });
+    vi.mocked(getCredentialValidity).mockResolvedValue({ valid: true });
+
+    renderPage("/verificador?id=11", {
+      ...ANONYMOUS_SESSION,
+      session: {
+        accessToken: "token",
+        address: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+        chainId: 20260711,
+        capabilities: { ...EMPTY_CAPABILITIES, canReviewPolice: true },
+        expiresAt: "2099-01-01T00:00:00.000Z"
+      },
+      isAuthenticated: true
+    });
+
+    expect(await screen.findByText(/Vista policial/)).toBeInTheDocument();
+    expect(screen.getByText("Policia")).toBeInTheDocument();
+    expect(screen.getByText("Mayor de edad")).toBeInTheDocument();
+    expect(screen.getByText("Si")).toBeInTheDocument();
+    expect(screen.queryByText("DNI-000011-4")).not.toBeInTheDocument();
   });
 });

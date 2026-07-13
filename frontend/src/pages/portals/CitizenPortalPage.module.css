@@ -25,6 +25,13 @@
   font-size: var(--font-size-sm);
 }
 
+.blocked {
+  border-left: 3px solid var(--color-warning);
+  padding-left: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
 .list {
   list-style: none;
   display: flex;

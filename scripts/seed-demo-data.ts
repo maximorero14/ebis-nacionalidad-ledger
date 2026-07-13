@@ -3,7 +3,7 @@ import path from "node:path";
 import { network } from "hardhat";
 import { createWalletClient, http, keccak256, parseEventLogs, toHex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { demoAccounts } from "./demo-wallets.js";
+import { demoAccount, demoAccounts } from "./demo-wallets.js";
 
 const NETWORK_NAME = "besuLocal";
 const RPC_URL = process.env.BESU_LOCAL_RPC_URL ?? "http://127.0.0.1:8545";
@@ -39,8 +39,8 @@ async function mineWrite(publicClient, promise) {
   return { hash, receipt };
 }
 
-async function createFundedCase(context, label) {
-  const { registry, token, publicClient, admin, citizen, feeAmount, free } = context;
+async function createFundedCase(context, label, citizen) {
+  const { registry, token, publicClient, admin, feeAmount, free } = context;
 
   const { receipt: createReceipt } = await mineWrite(
     publicClient,
@@ -108,7 +108,6 @@ async function main() {
     token,
     publicClient,
     admin: privateKeyToAccount(accounts.admin.privateKey),
-    citizen: privateKeyToAccount(accounts.citizen.privateKey),
     foreignAffairs: privateKeyToAccount(accounts.foreignAffairs.privateKey),
     police: privateKeyToAccount(accounts.police.privateKey),
     issuer: privateKeyToAccount(accounts.issuer.privateKey),
@@ -118,11 +117,17 @@ async function main() {
     // this zero-basefee network (see docs/evidencias/M5_DESPLIEGUE.md, M5.2 finding).
     free: { gasPrice: 0n }
   };
+  const seedCitizens = {
+    happy: privateKeyToAccount(accounts.citizen.privateKey),
+    remediation: privateKeyToAccount(demoAccount(8).privateKey),
+    rejected: privateKeyToAccount(demoAccount(9).privateKey),
+    revoked: privateKeyToAccount(demoAccount(10).privateKey)
+  };
 
   const results = {};
 
   // --- Case 1: happy path, approved and credentialed --------------------------
-  const happyCaseId = await createFundedCase(context, "happy");
+  const happyCaseId = await createFundedCase(context, "happy", seedCitizens.happy);
   await mineWrite(
     publicClient,
     registry.write.approveForeignAffairs([happyCaseId, 0n], {
@@ -142,10 +147,18 @@ async function main() {
     )
   );
   console.log(`[happy] case #${happyCaseId} approved and credential issued`);
-  results.happy = { caseId: happyCaseId.toString(), status: "APPROVED_WITH_CREDENTIAL" };
+  results.happy = {
+    caseId: happyCaseId.toString(),
+    owner: seedCitizens.happy.address,
+    status: "APPROVED_WITH_CREDENTIAL"
+  };
 
   // --- Case 2: remediation requested, awaiting citizen resubmission -----------
-  const remediationCaseId = await createFundedCase(context, "remediation");
+  const remediationCaseId = await createFundedCase(
+    context,
+    "remediation",
+    seedCitizens.remediation
+  );
   await mineWrite(
     publicClient,
     registry.write.requestRemediation([remediationCaseId, REMEDIATION_REASON], {
@@ -154,10 +167,14 @@ async function main() {
     })
   );
   console.log(`[remediation] case #${remediationCaseId} sent back to REMEDIATION_REQUIRED`);
-  results.remediation = { caseId: remediationCaseId.toString(), status: "REMEDIATION_REQUIRED" };
+  results.remediation = {
+    caseId: remediationCaseId.toString(),
+    owner: seedCitizens.remediation.address,
+    status: "REMEDIATION_REQUIRED"
+  };
 
   // --- Case 3: rejected --------------------------------------------------------
-  const rejectedCaseId = await createFundedCase(context, "rejected");
+  const rejectedCaseId = await createFundedCase(context, "rejected", seedCitizens.rejected);
   await mineWrite(
     publicClient,
     registry.write.rejectCase([rejectedCaseId, REJECTION_REASON], {
@@ -166,10 +183,14 @@ async function main() {
     })
   );
   console.log(`[rejected] case #${rejectedCaseId} rejected`);
-  results.rejected = { caseId: rejectedCaseId.toString(), status: "REJECTED" };
+  results.rejected = {
+    caseId: rejectedCaseId.toString(),
+    owner: seedCitizens.rejected.address,
+    status: "REJECTED"
+  };
 
   // --- Case 4: approved, credentialed, then revoked ----------------------------
-  const revokedCaseId = await createFundedCase(context, "revoked");
+  const revokedCaseId = await createFundedCase(context, "revoked", seedCitizens.revoked);
   await mineWrite(
     publicClient,
     registry.write.approveForeignAffairs([revokedCaseId, 0n], {
@@ -199,7 +220,11 @@ async function main() {
     })
   );
   console.log(`[revoked] case #${revokedCaseId} approved, credentialed and then revoked`);
-  results.revoked = { caseId: revokedCaseId.toString(), status: "APPROVED_CREDENTIAL_REVOKED" };
+  results.revoked = {
+    caseId: revokedCaseId.toString(),
+    owner: seedCitizens.revoked.address,
+    status: "APPROVED_CREDENTIAL_REVOKED"
+  };
 
   const report = {
     network: NETWORK_NAME,

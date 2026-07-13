@@ -1,11 +1,13 @@
 import { apiClient } from "../../api/client";
 import { transactionOutcomeSchema, type TransactionOutcome } from "../transactions/schemas";
 import {
+  caseCreationEligibilitySchema,
   caseResponseSchema,
   caseSummaryListSchema,
   caseTimelineSchema,
   createCaseResponseSchema,
   submitDocumentsResponseSchema,
+  type CaseCreationEligibility,
   type CaseEvent,
   type CaseResponse,
   type CaseStatus,
@@ -70,6 +72,10 @@ export function listCases(status?: CaseStatus): Promise<CaseSummary[]> {
 
 export function listMyCases(): Promise<CaseSummary[]> {
   return apiClient.get("/cases/mine", caseSummaryListSchema);
+}
+
+export function getCaseCreationEligibility(): Promise<CaseCreationEligibility> {
+  return apiClient.get("/cases/mine/creation-eligibility", caseCreationEligibilitySchema);
 }
 
 export function requestRemediation(

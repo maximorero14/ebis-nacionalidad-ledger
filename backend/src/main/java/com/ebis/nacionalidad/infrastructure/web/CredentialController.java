@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Reads are public (no JWT) by design: this is the "verificador" actor's surface — anyone
- * with a credential id/QR must be able to check validity without an account, and none of
+ * with a credential id must be able to check validity without an account, and none of
  * this data is PII. See SecurityConfig.
  */
 @RestController

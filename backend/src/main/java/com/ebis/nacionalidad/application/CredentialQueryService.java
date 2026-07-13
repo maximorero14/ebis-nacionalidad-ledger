@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 /**
  * Reads are intentionally public (no JWT required, see SecurityConfig): this mirrors the
  * "auditor/verificador" actor from docs/plan/PLAN_EJECUCION_TFM.md, who must be able to
- * check a credential's validity from just its id/QR without any account. No PII is ever
+ * check a credential's validity from just its id without any account. No PII is ever
  * exposed by these reads.
  */
 @Service

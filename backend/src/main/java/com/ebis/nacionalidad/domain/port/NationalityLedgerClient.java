@@ -41,6 +41,12 @@ public interface NationalityLedgerClient {
 
     Optional<OnChainCase> readCase(long caseId);
 
+    long activeCaseOf(String ownerAddress);
+
+    long approvedCaseOf(String ownerAddress);
+
+    boolean canCreateCase(String ownerAddress);
+
     Optional<CredentialView> readCredential(long caseId);
 
     boolean isCredentialValid(long caseId);

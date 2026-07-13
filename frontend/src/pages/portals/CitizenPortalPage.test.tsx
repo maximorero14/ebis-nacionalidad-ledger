@@ -7,6 +7,7 @@ import { AuthContext, type AuthContextValue } from "../../auth/AuthContext";
 import { CitizenPortalPage } from "./CitizenPortalPage";
 
 vi.mock("../../features/cases/api", () => ({
+  getCaseCreationEligibility: vi.fn(),
   getCase: vi.fn(),
   listMyCases: vi.fn()
 }));
@@ -18,7 +19,7 @@ vi.mock("../../features/euro-balance/useEuroBalance", () => ({
 }));
 
 import { useCreateCaseWithWallet } from "../../features/cases/useCaseWalletActions";
-import { getCase, listMyCases } from "../../features/cases/api";
+import { getCase, getCaseCreationEligibility, listMyCases } from "../../features/cases/api";
 
 const SESSION: AuthContextValue = {
   session: {
@@ -60,6 +61,7 @@ function renderPage() {
 
 afterEach(() => {
   vi.mocked(useCreateCaseWithWallet).mockReset();
+  vi.mocked(getCaseCreationEligibility).mockReset();
   vi.mocked(getCase).mockReset();
   vi.mocked(listMyCases).mockReset();
 });
@@ -67,6 +69,11 @@ afterEach(() => {
 describe("CitizenPortalPage", () => {
   it("shows no own cases when /cases/mine is empty", async () => {
     vi.mocked(useCreateCaseWithWallet).mockReturnValue(walletAction());
+    vi.mocked(getCaseCreationEligibility).mockResolvedValue({
+      canCreate: true,
+      activeCaseId: 0,
+      approvedCaseId: 0
+    });
     vi.mocked(listMyCases).mockResolvedValue([]);
     renderPage();
     expect(
@@ -76,6 +83,11 @@ describe("CitizenPortalPage", () => {
 
   it("loads the citizen's cases from /cases/mine automatically", async () => {
     vi.mocked(useCreateCaseWithWallet).mockReturnValue(walletAction());
+    vi.mocked(getCaseCreationEligibility).mockResolvedValue({
+      canCreate: false,
+      activeCaseId: 0,
+      approvedCaseId: 1
+    });
     vi.mocked(listMyCases).mockResolvedValue([
       {
         caseId: 1,
@@ -96,6 +108,11 @@ describe("CitizenPortalPage", () => {
     vi.mocked(useCreateCaseWithWallet).mockImplementation((onConfirmed) =>
       walletAction(async () => onConfirmed?.(42))
     );
+    vi.mocked(getCaseCreationEligibility).mockResolvedValue({
+      canCreate: true,
+      activeCaseId: 0,
+      approvedCaseId: 0
+    });
     vi.mocked(listMyCases).mockResolvedValue([]);
     vi.mocked(getCase).mockResolvedValue({
       caseId: 42,
@@ -111,7 +128,9 @@ describe("CitizenPortalPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "Crear nuevo expediente" }));
+    const createButton = await screen.findByRole("button", { name: "Crear nuevo expediente" });
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
 
     await waitFor(() => {
       expect(screen.getByRole("link", { name: "Expediente #42" })).toBeInTheDocument();
@@ -123,13 +142,66 @@ describe("CitizenPortalPage", () => {
     vi.mocked(useCreateCaseWithWallet).mockReturnValue(
       walletAction(undefined, "sin fondos para gas")
     );
+    vi.mocked(getCaseCreationEligibility).mockResolvedValue({
+      canCreate: true,
+      activeCaseId: 0,
+      approvedCaseId: 0
+    });
     vi.mocked(listMyCases).mockResolvedValue([]);
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "Crear nuevo expediente" }));
+    const createButton = await screen.findByRole("button", { name: "Crear nuevo expediente" });
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("sin fondos para gas");
+  });
+
+  it("blocks creating a second active case", async () => {
+    vi.mocked(useCreateCaseWithWallet).mockReturnValue(walletAction());
+    vi.mocked(getCaseCreationEligibility).mockResolvedValue({
+      canCreate: false,
+      activeCaseId: 3,
+      approvedCaseId: 0
+    });
+    vi.mocked(listMyCases).mockResolvedValue([
+      {
+        caseId: 3,
+        ownerAddress: SESSION.session?.address ?? "",
+        status: "IN_REVIEW",
+        reviewRound: 0,
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText(/Ya tenes el expediente #3 activo/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Crear nuevo expediente" })).toBeDisabled();
+  });
+
+  it("blocks creating a new case after approval", async () => {
+    vi.mocked(useCreateCaseWithWallet).mockReturnValue(walletAction());
+    vi.mocked(getCaseCreationEligibility).mockResolvedValue({
+      canCreate: false,
+      activeCaseId: 0,
+      approvedCaseId: 5
+    });
+    vi.mocked(listMyCases).mockResolvedValue([
+      {
+        caseId: 5,
+        ownerAddress: SESSION.session?.address ?? "",
+        status: "APPROVED",
+        reviewRound: 0,
+        updatedAt: new Date().toISOString()
+      }
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText(/Ya tenes el expediente #5 aprobado/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Crear nuevo expediente" })).toBeDisabled();
   });
 });
 

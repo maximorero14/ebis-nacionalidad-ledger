@@ -47,6 +47,8 @@ contract NationalityCaseRegistry is AccessControl {
 
     uint256 private nextCaseId = 1;
     mapping(uint256 caseId => CaseData data) private cases;
+    mapping(address owner => uint256 caseId) private activeCaseByOwner;
+    mapping(address owner => uint256 caseId) private approvedCaseByOwner;
 
     error Unauthorized(address actor, bytes32 role);
     error InvalidCase(uint256 caseId);
@@ -65,6 +67,8 @@ contract NationalityCaseRegistry is AccessControl {
     error ZeroAddress();
     error ZeroAmount();
     error ExclusiveInstitutionRoles(address account);
+    error ActiveCaseAlreadyExists(address owner, uint256 caseId);
+    error CitizenAlreadyApproved(address owner, uint256 caseId);
 
     event CaseCreated(uint256 indexed caseId, address indexed owner);
     event DocumentsSubmitted(
@@ -143,9 +147,19 @@ contract NationalityCaseRegistry is AccessControl {
     }
 
     function createCase() external returns (uint256 caseId) {
+        uint256 approvedCaseId = approvedCaseByOwner[msg.sender];
+        if (approvedCaseId != 0) {
+            revert CitizenAlreadyApproved(msg.sender, approvedCaseId);
+        }
+        uint256 activeCaseId = activeCaseByOwner[msg.sender];
+        if (activeCaseId != 0) {
+            revert ActiveCaseAlreadyExists(msg.sender, activeCaseId);
+        }
+
         caseId = nextCaseId++;
         cases[caseId].owner = msg.sender;
         cases[caseId].status = CaseStatus.CREATED;
+        activeCaseByOwner[msg.sender] = caseId;
 
         emit CaseCreated(caseId, msg.sender);
     }
@@ -250,6 +264,7 @@ contract NationalityCaseRegistry is AccessControl {
         _requireStatus(caseId, caseData.status, CaseStatus.IN_REVIEW);
 
         caseData.status = CaseStatus.REJECTED;
+        activeCaseByOwner[caseData.owner] = 0;
         emit CaseRejected(caseId, msg.sender, caseData.reviewRound, reasonCode);
     }
 
@@ -313,9 +328,23 @@ contract NationalityCaseRegistry is AccessControl {
         return _existingCaseView(caseId).reviewRound;
     }
 
+    function activeCaseOf(address owner) external view returns (uint256) {
+        return activeCaseByOwner[owner];
+    }
+
+    function approvedCaseOf(address owner) external view returns (uint256) {
+        return approvedCaseByOwner[owner];
+    }
+
+    function canCreateCase(address owner) external view returns (bool) {
+        return activeCaseByOwner[owner] == 0 && approvedCaseByOwner[owner] == 0;
+    }
+
     function _approveIfComplete(uint256 caseId, CaseData storage caseData) private {
         if (caseData.foreignAffairsApproved && caseData.policeApproved) {
             caseData.status = CaseStatus.APPROVED;
+            activeCaseByOwner[caseData.owner] = 0;
+            approvedCaseByOwner[caseData.owner] = caseId;
             emit CaseApproved(caseId, caseData.reviewRound);
         }
     }

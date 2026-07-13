@@ -71,6 +71,17 @@ public class CaseQueryController {
         return caseQueryService.listMine(wallet.address()).stream().map(CaseSummaryResponse::from).toList();
     }
 
+    @GetMapping("/cases/mine/creation-eligibility")
+    @Operation(
+            summary = "Indica si la wallet autenticada puede crear otro expediente",
+            description =
+                    "Lee directamente los helpers on-chain activeCaseOf/approvedCaseOf/canCreateCase. "
+                            + "No depende de la proyeccion PostgreSQL.")
+    public CaseCreationEligibilityResponse creationEligibility(@AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedWallet wallet = AuthenticatedWallet.from(jwt);
+        return CaseCreationEligibilityResponse.from(caseQueryService.creationEligibility(wallet.address()));
+    }
+
     @ExceptionHandler(WrongRoleException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public ErrorResponse handleWrongRole(WrongRoleException exception) {

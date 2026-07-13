@@ -6,7 +6,7 @@ import { Button } from "../../design-system/components/Button";
 import { TextField } from "../../design-system/components/TextField";
 import { TransactionProgress } from "../../features/transactions/TransactionProgress";
 import { EuroBalanceWidget } from "../../features/euro-balance/EuroBalanceWidget";
-import { CredentialCard } from "../../features/credentials/CredentialCard";
+import { DigitalIdentityCredentialCard } from "../../features/credentials/DigitalIdentityCard";
 import { isApiError } from "../../api/errors";
 import { getCase, getCaseTimeline } from "../../features/cases/api";
 import {
@@ -204,8 +204,11 @@ export function CaseDetailPage() {
 
       {caseData.credentialTokenId > 0 ? (
         <Card>
-          <h2>Credencial</h2>
-          <CredentialCard tokenId={caseData.credentialTokenId} />
+          <h2>Mi DNI digital</h2>
+          <DigitalIdentityCredentialCard
+            tokenId={caseData.credentialTokenId}
+            accessMode="citizen"
+          />
         </Card>
       ) : null}
 

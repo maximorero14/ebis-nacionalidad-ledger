@@ -5,6 +5,7 @@ import { Card } from "../../design-system/components/Card";
 import { Badge } from "../../design-system/components/Badge";
 import { Button } from "../../design-system/components/Button";
 import { TransactionProgress } from "../../features/transactions/TransactionProgress";
+import { DigitalIdentityCredentialCard } from "../../features/credentials/DigitalIdentityCard";
 import { ReasonCodeField } from "../../features/cases/ReasonCodeField";
 import { REJECTION_REASON_CODES, REMEDIATION_REASON_CODES } from "../../features/cases/reasonCodes";
 import { isApiError } from "../../api/errors";
@@ -97,6 +98,13 @@ export function PoliceCaseDetailPage() {
       <Card>
         <CaseSummaryPanel caseData={caseData} />
       </Card>
+
+      {caseData.credentialTokenId > 0 ? (
+        <Card>
+          <h2>Identidad verificada</h2>
+          <DigitalIdentityCredentialCard tokenId={caseData.credentialTokenId} accessMode="police" />
+        </Card>
+      ) : null}
 
       <div className={styles["splitGrid"]}>
         <Card>

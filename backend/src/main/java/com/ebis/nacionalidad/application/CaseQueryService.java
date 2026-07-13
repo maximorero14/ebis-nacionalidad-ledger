@@ -2,6 +2,7 @@ package com.ebis.nacionalidad.application;
 
 import com.ebis.nacionalidad.domain.model.ApplicationRole;
 import com.ebis.nacionalidad.domain.model.CaseEvent;
+import com.ebis.nacionalidad.domain.model.CaseCreationEligibility;
 import com.ebis.nacionalidad.domain.model.CaseProjection;
 import com.ebis.nacionalidad.domain.model.CaseStatus;
 import com.ebis.nacionalidad.domain.model.OnChainCase;
@@ -73,6 +74,17 @@ public class CaseQueryService {
         return caseProjectionPort.findAll().stream()
                 .filter(projection -> projection.ownerAddress().equalsIgnoreCase(requesterAddress))
                 .toList();
+    }
+
+    public CaseCreationEligibility creationEligibility(String requesterAddress) {
+        long activeCaseId = ledgerClient.activeCaseOf(requesterAddress);
+        long approvedCaseId = ledgerClient.approvedCaseOf(requesterAddress);
+        boolean contractAllowsCreation = ledgerClient.canCreateCase(requesterAddress);
+        CaseCreationEligibility eligibility = CaseCreationEligibility.of(activeCaseId, approvedCaseId);
+        if (eligibility.canCreate() != contractAllowsCreation) {
+            throw new IllegalStateException("Case creation eligibility helpers are inconsistent on-chain");
+        }
+        return eligibility;
     }
 
     private void requireInstitutional(String requesterAddress) {

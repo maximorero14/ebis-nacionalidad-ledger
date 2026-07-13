@@ -107,4 +107,53 @@ class CaseQueryServiceTest {
 
         assertThat(result).containsExactly(projections.get(0));
     }
+
+    @Test
+    void creationEligibilityAllowsCitizenWithoutActiveOrApprovedCases() {
+        when(ledgerClient.activeCaseOf("0xCITIZEN")).thenReturn(0L);
+        when(ledgerClient.approvedCaseOf("0xCITIZEN")).thenReturn(0L);
+        when(ledgerClient.canCreateCase("0xCITIZEN")).thenReturn(true);
+
+        var result = service().creationEligibility("0xCITIZEN");
+
+        assertThat(result.canCreate()).isTrue();
+        assertThat(result.activeCaseId()).isZero();
+        assertThat(result.approvedCaseId()).isZero();
+    }
+
+    @Test
+    void creationEligibilityBlocksCitizenWithAnActiveCase() {
+        when(ledgerClient.activeCaseOf("0xCITIZEN")).thenReturn(7L);
+        when(ledgerClient.approvedCaseOf("0xCITIZEN")).thenReturn(0L);
+        when(ledgerClient.canCreateCase("0xCITIZEN")).thenReturn(false);
+
+        var result = service().creationEligibility("0xCITIZEN");
+
+        assertThat(result.canCreate()).isFalse();
+        assertThat(result.activeCaseId()).isEqualTo(7L);
+        assertThat(result.approvedCaseId()).isZero();
+    }
+
+    @Test
+    void creationEligibilityBlocksCitizenWithAnApprovedCase() {
+        when(ledgerClient.activeCaseOf("0xCITIZEN")).thenReturn(0L);
+        when(ledgerClient.approvedCaseOf("0xCITIZEN")).thenReturn(9L);
+        when(ledgerClient.canCreateCase("0xCITIZEN")).thenReturn(false);
+
+        var result = service().creationEligibility("0xCITIZEN");
+
+        assertThat(result.canCreate()).isFalse();
+        assertThat(result.activeCaseId()).isZero();
+        assertThat(result.approvedCaseId()).isEqualTo(9L);
+    }
+
+    @Test
+    void creationEligibilityRejectsInconsistentOnChainHelpers() {
+        when(ledgerClient.activeCaseOf("0xCITIZEN")).thenReturn(0L);
+        when(ledgerClient.approvedCaseOf("0xCITIZEN")).thenReturn(0L);
+        when(ledgerClient.canCreateCase("0xCITIZEN")).thenReturn(false);
+
+        assertThatThrownBy(() -> service().creationEligibility("0xCITIZEN"))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }

@@ -26,6 +26,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   ZeroAmount: "El monto no puede ser cero.",
   ExclusiveInstitutionRoles:
     "Este rol no puede combinarse con otro rol institucional en la misma cuenta.",
+  ActiveCaseAlreadyExists:
+    "Ya tenes un expediente activo. No podes crear otro hasta que se resuelva.",
+  CitizenAlreadyApproved:
+    "Esta wallet ya tiene un expediente aprobado y no puede crear un expediente nuevo.",
   FaucetDisabled: "El faucet de Euro Digital demo esta deshabilitado en este momento.",
   FaucetAlreadyClaimed:
     "Esta direccion ya reclamo el faucet anteriormente (es un beneficio unico por cuenta, no por expediente).",

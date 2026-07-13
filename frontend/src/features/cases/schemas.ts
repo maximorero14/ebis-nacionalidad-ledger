@@ -77,3 +77,10 @@ export const caseSummaryResponseSchema = z.object({
 export type CaseSummary = z.infer<typeof caseSummaryResponseSchema>;
 
 export const caseSummaryListSchema = z.array(caseSummaryResponseSchema);
+
+export const caseCreationEligibilitySchema = z.object({
+  canCreate: z.boolean(),
+  activeCaseId: z.number(),
+  approvedCaseId: z.number()
+});
+export type CaseCreationEligibility = z.infer<typeof caseCreationEligibilitySchema>;

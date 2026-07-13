@@ -91,6 +91,8 @@ final class CustomErrorDecoder {
         register(registry, "ZeroAddress()", "ZeroAddress", List.of());
         register(registry, "ZeroAmount()", "ZeroAmount", List.of());
         register(registry, "ExclusiveInstitutionRoles(address)", "ExclusiveInstitutionRoles", List.of("account"), new TypeReference<Address>() {});
+        register(registry, "ActiveCaseAlreadyExists(address,uint256)", "ActiveCaseAlreadyExists", List.of("owner", "caseId"), new TypeReference<Address>() {}, new TypeReference<Uint256>() {});
+        register(registry, "CitizenAlreadyApproved(address,uint256)", "CitizenAlreadyApproved", List.of("owner", "caseId"), new TypeReference<Address>() {}, new TypeReference<Uint256>() {});
         register(registry, "FaucetDisabled()", "FaucetDisabled", List.of());
         register(registry, "FaucetAlreadyClaimed(address)", "FaucetAlreadyClaimed", List.of("account"), new TypeReference<Address>() {});
         register(registry, "CredentialNotFound(uint256)", "CredentialNotFound", List.of("tokenId"), new TypeReference<Uint256>() {});

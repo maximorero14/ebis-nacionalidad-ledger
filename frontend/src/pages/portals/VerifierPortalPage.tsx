@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../../auth/useAuth";
 import { Card } from "../../design-system/components/Card";
 import { Badge } from "../../design-system/components/Badge";
 import { Button } from "../../design-system/components/Button";
 import { TextField } from "../../design-system/components/TextField";
 import { useCredential } from "../../features/credentials/useCredential";
+import { DigitalIdentityCard } from "../../features/credentials/DigitalIdentityCard";
 import { useContracts } from "../../features/contracts/useContracts";
 import { isApiError } from "../../api/errors";
 import styles from "./VerifierPortalPage.module.css";
@@ -12,16 +14,14 @@ import styles from "./VerifierPortalPage.module.css";
 /**
  * Public: no login required (mirrors GET /credentials/{id}(/validity) on the backend,
  * both permitAll in SecurityConfig — see docs/FUNCIONAL.md, the Verificador actor has
- * no account). The id lives in the URL query string so a real deployment's QR would
- * just encode this same link; there is no camera/QR-scanning library here, "de demo"
- * per the plan wording.
+ * no account). The credential id can also live in the URL query string so the page is
+ * refreshable, but verification itself is always entered as an explicit credential lookup.
  */
 export function VerifierPortalPage() {
+  const { session } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const idFromUrl = searchParams.get("id") ?? "";
   const [inputValue, setInputValue] = useState(idFromUrl);
-  const [showTechnicalEvidence, setShowTechnicalEvidence] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const queriedTokenId = Number(idFromUrl);
   const hasQuery =
@@ -35,32 +35,45 @@ export function VerifierPortalPage() {
     const parsed = Number(inputValue.trim());
     if (Number.isInteger(parsed) && parsed > 0) {
       setSearchParams({ id: String(parsed) });
-      setShowTechnicalEvidence(false);
-      setCopied(false);
     }
   }
 
-  async function handleCopyLink() {
-    await navigator.clipboard.writeText(
-      `${window.location.origin}/verificador?id=${queriedTokenId}`
-    );
-    setCopied(true);
-  }
-
   const isValid = validity.data?.valid ?? (credential.data ? !credential.data.revoked : undefined);
+  const viewerOwnsCredential =
+    credential.data !== undefined &&
+    session?.address.toLowerCase() === credential.data.holderAddress.toLowerCase();
+  const accessMode = viewerOwnsCredential
+    ? "citizen"
+    : session?.capabilities.canReviewPolice
+      ? "police"
+      : "public";
+  const roleLabels = walletRoleLabels(session);
 
   return (
     <div className={styles["page"]}>
       <Card className={styles["hero"]}>
-        <div>
-          <p className={styles["eyebrow"]}>Consulta publica</p>
-          <h1>Portal verificador</h1>
+        <div className={styles["walletRoles"]} aria-label="Roles de la wallet">
+          <span>{session ? "Wallet conectada" : "Sin wallet conectada"}</span>
+          <div>
+            {roleLabels.map((role) => (
+              <span key={role} className={styles["roleChip"]}>
+                {role}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className={styles["hint"]}>
-          Consulta publica: no hace falta iniciar sesion. En un despliegue real, un QR codificaria
-          un enlace como el que genera este formulario; aqui se simula escribiendo el identificador
-          de la credencial.
-        </p>
+
+        <div className={styles["heroContent"]}>
+          <div>
+            <p className={styles["eyebrow"]}>Consulta publica</p>
+            <h1>Portal verificador</h1>
+          </div>
+          <p className={styles["hint"]}>
+            Introduce el identificador de la credencial para revelar el DNI digital y su evidencia
+            tecnica asociada.
+          </p>
+        </div>
+
         <form
           className={styles["form"]}
           onSubmit={(event) => {
@@ -74,12 +87,12 @@ export function VerifierPortalPage() {
             inputMode="numeric"
             placeholder="Ej: 11"
           />
-          <Button type="submit">Consultar</Button>
+          <Button type="submit">Consultar DNI</Button>
         </form>
       </Card>
 
       {hasQuery ? (
-        <Card>
+        <Card key={idFromUrl} className={styles["resultCard"]}>
           {credential.isPending ? <p>Consultando credencial...</p> : null}
 
           {credential.isError ? (
@@ -92,63 +105,114 @@ export function VerifierPortalPage() {
 
           {credential.data ? (
             <>
-              {isValid ? (
-                <Badge tone="success">Activa</Badge>
-              ) : (
-                <Badge tone="danger">Revocada</Badge>
-              )}
+              <DigitalIdentityCard
+                credential={credential.data}
+                isValid={isValid}
+                accessMode={accessMode}
+              />
 
-              <div className={styles["section"]}>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setShowTechnicalEvidence((current) => !current);
-                  }}
-                >
-                  {showTechnicalEvidence ? "Ocultar" : "Mostrar"} evidencia tecnica (opcional)
-                </Button>
-                {showTechnicalEvidence ? (
-                  <div className={styles["technical"]}>
-                    <p>Token: #{credential.data.tokenId}</p>
-                    <p>
-                      Contrato de credenciales:{" "}
-                      <code>{contracts.data?.credentialAddress ?? "consultando..."}</code>
-                    </p>
-                    <p>Chain ID: {contracts.data?.chainId ?? "consultando..."}</p>
-                    <p>
-                      Titular (direccion EVM): <code>{credential.data.holderAddress}</code>
-                    </p>
-                    {credential.data.revoked && credential.data.revocationReasonCode ? (
-                      <p>
-                        Codigo de revocacion (hash, no reversible):{" "}
-                        <code>{credential.data.revocationReasonCode}</code>
-                      </p>
-                    ) : null}
-                    <p className={styles["hint"]}>
-                      El hash de transaccion y bloque de emision no estan disponibles desde este
-                      portal publico: consultarlos requeriria exponer el timeline del expediente
-                      (`GET /cases/{"{id}"}/timeline`) sin autenticacion, lo que revelaria mas de lo
-                      necesario sobre el proceso del titular.
-                    </p>
+              <section className={styles["technical"]} aria-label="Parte trasera del DNI digital">
+                <div className={styles["backWatermark"]} aria-hidden="true">
+                  ESP
+                </div>
+                <div className={styles["technicalHeader"]}>
+                  <div>
+                    <p className={styles["eyebrow"]}>Parte trasera</p>
+                    <h2>Evidencia tecnica</h2>
                   </div>
-                ) : null}
-              </div>
+                  <span
+                    className={`${styles["statusPill"]} ${
+                      isValid ? styles["success"] : styles["danger"]
+                    }`}
+                  >
+                    {isValid ? "Vigente" : "No vigente"}
+                  </span>
+                </div>
 
-              <div className={styles["section"]}>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    void handleCopyLink();
-                  }}
-                >
-                  Copiar enlace de verificacion (equivalente al QR)
-                </Button>
-                {copied ? <span className={styles["hint"]}> Enlace copiado.</span> : null}
-              </div>
+                <dl className={styles["evidenceGrid"]}>
+                  <div>
+                    <dt>Token</dt>
+                    <dd>#{credential.data.tokenId}</dd>
+                  </div>
+                  <div>
+                    <dt>Chain ID</dt>
+                    <dd>{contracts.data?.chainId ?? "Consultando"}</dd>
+                  </div>
+                  <div>
+                    <dt>Contrato de credenciales</dt>
+                    <dd>
+                      <code>{contracts.data?.credentialAddress ?? "consultando..."}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Titular EVM</dt>
+                    <dd>
+                      <code>{credential.data.holderAddress}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Compromiso de datos</dt>
+                    <dd>
+                      <code>{credential.data.dataCommitment ?? "No informado"}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Versiones</dt>
+                    <dd>
+                      Datos v{credential.data.dataVersion ?? 1} / Esquema v
+                      {credential.data.schemaVersion ?? 1}
+                    </dd>
+                  </div>
+                  {credential.data.revoked && credential.data.revocationReasonCode ? (
+                    <div>
+                      <dt>Codigo de revocacion</dt>
+                      <dd>
+                        <code>{credential.data.revocationReasonCode}</code>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+
+                <p className={styles["technicalNote"]}>
+                  Esta vista confirma estado, contrato y compromiso de datos sin abrir informacion
+                  personal adicional. La cadena guarda pruebas y estados; los datos personales
+                  permanecen fuera de la blockchain.
+                </p>
+              </section>
             </>
           ) : null}
         </Card>
       ) : null}
     </div>
   );
+}
+
+function walletRoleLabels(session: ReturnType<typeof useAuth>["session"]): string[] {
+  if (!session) {
+    return ["Verificador publico"];
+  }
+
+  const roles: string[] = ["Ciudadano"];
+  const capabilities = session.capabilities;
+
+  if (capabilities.canReviewPolice) {
+    roles.push("Policia");
+  }
+  if (capabilities.canReviewForeignAffairs) {
+    roles.push("Extranjeria");
+  }
+  if (capabilities.canIssueCredential) {
+    roles.push("Emisor");
+  }
+  if (capabilities.canRevokeCredential) {
+    roles.push("Revocador");
+  }
+  if (capabilities.isRegistryAdmin || capabilities.isTokenAdmin || capabilities.isCredentialAdmin) {
+    roles.push("Admin");
+  }
+  if (capabilities.canMintDemoEuro) {
+    roles.push("Faucet EURD");
+  }
+
+  return roles;
 }

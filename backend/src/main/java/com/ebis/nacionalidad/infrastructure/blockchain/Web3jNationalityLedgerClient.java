@@ -148,6 +148,26 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
     }
 
     @Override
+    public long activeCaseOf(String ownerAddress) {
+        return readCaseIdForOwner("activeCaseOf", ownerAddress);
+    }
+
+    @Override
+    public long approvedCaseOf(String ownerAddress) {
+        return readCaseIdForOwner("approvedCaseOf", ownerAddress);
+    }
+
+    @Override
+    public boolean canCreateCase(String ownerAddress) {
+        Function function =
+                new Function(
+                        "canCreateCase",
+                        List.of(new Address(ownerAddress)),
+                        List.of(new TypeReference<Bool>() {}));
+        return ((Bool) call(manifest.registryAddress(), function).get(0)).getValue();
+    }
+
+    @Override
     public Optional<CredentialView> readCredential(long caseId) {
         Function function =
                 new Function(
@@ -290,6 +310,15 @@ public class Web3jNationalityLedgerClient implements NationalityLedgerClient {
             case CREDENTIAL -> manifest.credentialAddress();
             case TOKEN -> manifest.tokenAddress();
         };
+    }
+
+    private long readCaseIdForOwner(String functionName, String ownerAddress) {
+        Function function =
+                new Function(
+                        functionName,
+                        List.of(new Address(ownerAddress)),
+                        List.of(new TypeReference<Uint256>() {}));
+        return ((Uint256) call(manifest.registryAddress(), function).get(0)).getValue().longValue();
     }
 
     private UnsupportedOperationException walletSignedTransactionRequired(String operation) {

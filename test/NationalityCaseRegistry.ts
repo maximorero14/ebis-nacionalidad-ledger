@@ -145,6 +145,55 @@ describe("NationalityCaseRegistry", function () {
     );
   });
 
+  it("allows each citizen to have only one active case at a time", async function () {
+    const { registry, citizen, other } = await networkHelpers.loadFixture(deployRegistryFixture);
+
+    await registry.write.createCase({ account: citizen.account });
+
+    assert.equal(await registry.read.activeCaseOf([citizen.account.address]), 1n);
+    assert.equal(await registry.read.approvedCaseOf([citizen.account.address]), 0n);
+    assert.equal(await registry.read.canCreateCase([citizen.account.address]), false);
+
+    await assert.rejects(
+      registry.write.createCase({ account: citizen.account }),
+      /ActiveCaseAlreadyExists/
+    );
+
+    await registry.write.createCase({ account: other.account });
+    assert.equal(await registry.read.activeCaseOf([other.account.address]), 2n);
+  });
+
+  it("allows a new case after rejection but blocks forever after approval", async function () {
+    const { token, registry, citizen, foreignAffairs, police } =
+      await networkHelpers.loadFixture(deployRegistryFixture);
+
+    await registry.write.createCase({ account: citizen.account });
+    await registry.write.submitDocuments([1n, DOC_1], { account: citizen.account });
+    await token.write.mint([citizen.account.address, 100_00n]);
+    await token.write.approve([registry.address, 42_00n], { account: citizen.account });
+    await registry.write.payFee([1n], { account: citizen.account });
+    await registry.write.rejectCase([1n, REJECTION_REASON], { account: police.account });
+
+    assert.equal(await registry.read.activeCaseOf([citizen.account.address]), 0n);
+    assert.equal(await registry.read.canCreateCase([citizen.account.address]), true);
+
+    await registry.write.createCase({ account: citizen.account });
+    await registry.write.submitDocuments([2n, DOC_2], { account: citizen.account });
+    await token.write.approve([registry.address, 42_00n], { account: citizen.account });
+    await registry.write.payFee([2n], { account: citizen.account });
+    await registry.write.approveForeignAffairs([2n, 0n], { account: foreignAffairs.account });
+    await registry.write.approvePolice([2n, 0n], { account: police.account });
+
+    assert.equal(await registry.read.activeCaseOf([citizen.account.address]), 0n);
+    assert.equal(await registry.read.approvedCaseOf([citizen.account.address]), 2n);
+    assert.equal(await registry.read.canCreateCase([citizen.account.address]), false);
+
+    await assert.rejects(
+      registry.write.createCase({ account: citizen.account }),
+      /CitizenAlreadyApproved/
+    );
+  });
+
   it("pays the fee atomically and prevents duplicate payment", async function () {
     const { token, registry, treasury, citizen } = await createSubmittedCase();
 
